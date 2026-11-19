@@ -2,7 +2,7 @@
 
 > 入口页面与 `api.php` 位于项目根目录；后端模块统一放在 `api/`；唯一配置文件为 `config.toml`；文档统一归档在 `doc/`。
 
-项目说明：[README.md](README.md) ｜ 完整设计：[doc/README.md](doc/README.md) ｜ 接口：[doc/API.md](doc/API.md) ｜ 部署：[doc/DEPLOY.md](doc/DEPLOY.md)
+项目说明：[README.md](README.md) ｜ 许可证：[LICENSE](LICENSE) ｜ 贡献者：[CONTRIBUTORS.md](CONTRIBUTORS.md) ｜ 完整设计：[doc/README.md](doc/README.md) ｜ 接口：[doc/API.md](doc/API.md) ｜ 部署：[doc/DEPLOY.md](doc/DEPLOY.md)
 
 ## 1. 目录结构
 
@@ -46,7 +46,9 @@
 │     └─ .snapshot         外部修改检测快照
 │
 ├─ 文档与索引
+│  ├─ LICENSE                 MIT License
 │  ├─ README.md               项目简要说明（快速开始 / 文档入口）
+│  ├─ CONTRIBUTORS.md         贡献者名单与贡献方式
 │  ├─ mulu.md                 本速查（根目录快捷入口）
 │  └─ doc/
 │     ├─ README.md            架构、模块、数据流、安全
@@ -119,6 +121,8 @@ Nginx 规则         宝塔 / 通用 Nginx 必须添加
 ### 可选
 
 ```
+LICENSE     MIT License
+CONTRIBUTORS.md  贡献者记录
 README.md   项目简要说明
 example_config.toml  配置模板（部署时复制为 config.toml）
 doc/        交接文档，不影响运行

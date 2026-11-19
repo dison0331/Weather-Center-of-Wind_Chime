@@ -63,7 +63,9 @@
 │  └─ weather.db-shm        共享内存索引
 │
 ├─ 文档与索引
+│  ├─ LICENSE               MIT License
 │  ├─ README.md             项目简要说明（快速开始 / 文档入口）
+│  ├─ CONTRIBUTORS.md       贡献者名单与贡献方式
 │  ├─ mulu.md               根目录速查入口
 │  └─ doc/
 │     ├─ README.md          本文档（架构、数据流、部署、安全）
@@ -100,7 +102,7 @@
 - **必需（根目录）**：`api.php`、`amap-js-proxy.php`、`index.html`、`user.html`、`admin.html`、`404.html`、`schema.sql`、`config.toml`；
 - **必需（api/ 目录）**：`config.php`、`toml.php`、`helpers.php`、`db.php`、`auth.php`、`rate_limit.php`、`amap.php`、`api_auth.php`、`api_weather.php`、`api_cities.php`、`api_admin.php`；
 - **按环境需要**：`.htaccess` 与 `api/.htaccess`（Apache）、`.user.ini`（宝塔/PHP-FPM 建议）、Nginx 规则（宝塔/通用 Nginx 必须）；
-- **可选**：`README.md`、`example_config.toml`、`doc/`、`mulu.md`；
+- **可选**：`LICENSE`、`README.md`、`CONTRIBUTORS.md`、`example_config.toml`、`doc/`、`mulu.md`；
 - **不要上传**：`.codeartsdoer/`、`.git/`、`.gitignore`、`config_backups/`、`config_backups/.snapshot`、本地生成的 `weather.db*`（迁移场景除外）。
 
 详细步骤见 [DEPLOY.md 4.2](DEPLOY.md#42-上传文件)。
@@ -576,7 +578,21 @@ cp -a /www/wwwroot/weather.yousb.top/config_backups /www/backup/weather/$STAMP/ 
 
 ---
 
-## 12. 变更记录
+## 12. 许可证与第三方服务
+
+本项目采用 [MIT License](../LICENSE) 发布。Copyright (c) 2026 风铃 (https://github.com/dison0331)。
+
+贡献者记录见 [CONTRIBUTORS.md](../CONTRIBUTORS.md)。
+
+第三方服务说明：
+
+- 本项目仅封装调用【高德开放平台 API】，**高德 API 不属于本开源代码范围**；
+- 使用时必须自行前往高德开放平台注册账号、申请 Key，遵守《高德地图开放平台服务协议》；
+- 在对外展示地图/结果时，按高德要求展示高德归属标注；
+- 高德服务有额度、计费、测绘合规限制，本作者不对高德 API 可用性、数据准确性承担任何责任；
+- 本项目不包含高德地图 SDK 源码；地图数据、服务及相关商标归高德所有，本项目与高德无隶属或代理关系。
+
+## 13. 变更记录
 
 | 版本 | 日期 | 说明 |
 |------|------|------|
