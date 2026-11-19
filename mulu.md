@@ -41,10 +41,9 @@
 │  ├─ weather.db              SQLite 主库（用户 / 城市 / 日志 / 缓存）
 │  ├─ weather.db-wal          WAL 预写日志
 │  ├─ weather.db-shm          共享内存索引
-│  ├─ config.toml.bak     上次保存的配置快照（根目录，扩展名规则拒绝）
 │  ├─ config.toml.lock    配置写入文件锁（根目录，扩展名规则拒绝）
-│  ├─ api/config_backups/  自动备份目录（保留最近 20 份，目录级拒绝访问）
-│  └─ api/config.snapshot  外部修改检测快照（目录级拒绝访问）
+│  └─ config_backups/      自动备份目录（含 .htaccess 保护；保留最近 20 份）
+│     └─ .snapshot         外部修改检测快照
 │
 ├─ 文档与索引
 │  ├─ README.md               项目简要说明（快速开始 / 文档入口）
@@ -64,7 +63,7 @@
 | `index.html` / `user.html` / `admin.html` / `404.html` | 允许 | 静态页面 |
 | `api.php` / `amap-js-proxy.php` | 允许 | 唯一后端对外入口 |
 | `/api/` 整个目录 | 拒绝 | 宝塔 Nginx `location ^~ /api/`；Apache `api/.htaccess` |
-| `config.toml` / `config.toml.bak` / `config.toml.lock` | 拒绝 | 根 `.htaccess` 与 Nginx 扩展名规则（`.toml/.bak/.lock`） |
+| `config.toml` / `config.toml.lock` / `config_backups/` | 拒绝 | 根 `.htaccess` 与 Nginx 规则（`.toml/.lock` + 备份目录 404） |
 | `schema.sql` / `weather.db*` / `.user.ini` / `.htaccess` | 拒绝 | 根 `.htaccess` 与 Nginx 扩展名规则 |
 | `README.md` / `mulu.md` / `doc/*.md` | 拒绝 | 同上 |
 
@@ -73,6 +72,8 @@
 ```nginx
 location = /api { return 404; }
 location ^~ /api/ { return 404; }
+location = /config_backups { return 404; }
+location ^~ /config_backups/ { return 404; }
 location ~* \.(db|db-wal|db-shm|sqlite|sql|md|ini|log|toml|bak|tmp|lock)$ { return 404; }
 ```
 
@@ -82,8 +83,8 @@ location ~* \.(db|db-wal|db-shm|sqlite|sql|md|ini|log|toml|bak|tmp|lock)$ { retu
 
 - **唯一配置源**：根目录 `config.toml`，包括数据库路径、时区、语言、版本号、高德 Key、限流参数、注册开关等。
 - **热重载**：外部修改 `config.toml` 后，下一次请求自动读取；后台保存立即刷新当前进程。
-- **自动备份**：保存配置或检测到外部修改时，写入 `api/config_backups/config-时间戳.toml`（保留最近 20 份），同时保留 `config.toml.bak`；检测快照为 `api/config.snapshot`。
-- **恢复**：把 `api/config_backups/` 中需要的备份复制为根目录 `config.toml`。
+- **自动备份**：保存配置或检测到外部修改时，写入 `config_backups/config-时间戳.toml`（保留最近 20 份）；检测快照为 `config_backups/.snapshot`。
+- **恢复**：把 `config_backups/` 中需要的备份复制为根目录 `config.toml`。
 - **请求级配置**：`timezone`、`language`、`app_version`、`database_path` 在下一次请求生效；其余业务配置保存后立即生效。
 - **数据库用途**：SQLite 只保存用户、关注城市、访问日志、游客令牌、黑名单、高德缓存与调用统计；不再保存系统配置。
 - **旧版本迁移**：首次请求会把旧 `system_config` 表内容自动补入 `config.toml`，完成后可手动执行 `DROP TABLE IF EXISTS system_config;`。
@@ -131,9 +132,9 @@ mulu.md     目录速查，不影响运行
 .git/               版本控制目录
 .gitignore          版本控制配置（可不上传）
 weather.db*         运行时生成；迁移场景除外
-config.toml.bak / config.toml.lock  运行时生成
-api/config_backups/  自动备份目录
-api/config.snapshot  配置修改检测快照
+config.toml.lock  运行时生成
+config_backups/  自动备份目录
+config_backups/.snapshot  配置修改检测快照
 ```
 
 ## 5. 结构约定

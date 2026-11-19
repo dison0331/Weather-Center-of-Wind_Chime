@@ -496,7 +496,7 @@ X-RateLimit-Remaining: 59
 
 保存规则：
 
-- 全部配置写入 `config.toml`（原子写 + 文件锁 + 自动备份 `config.toml.bak`）；
+- 全部配置写入 `config.toml`（原子写 + 文件锁 + 自动备份到根目录 `config_backups/`）；
 - 高德 Key、限流、注册开关等保存后立即生效；
 - `app_version`、`timezone`、`language`、`database_path` 在下一次请求生效；
 - `database_path` 会校验目标目录存在且可写；`timezone` 必须是有效 IANA 时区；

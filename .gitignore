@@ -1,13 +1,13 @@
+# 配置：排除线上隐私配置内容
+config.toml
+!example_config.toml
+
 # 运行时数据
 /weather.db*
-config.toml.bak
+/config_backups/*
+!/config_backups/.htaccess
 config.toml.lock
-/api/config_backups/
-/api/config.snapshot
 
 # 工具与日志
 /.codeartsdoer/
 *.log
-
-# 如已填写真实高德 Key，请取消下一行注释
-# config.toml

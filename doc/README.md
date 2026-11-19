@@ -89,7 +89,7 @@
 | `index.html` / `user.html` / `admin.html` / `404.html` | 允许 | 静态页面 |
 | `api.php` / `amap-js-proxy.php` | 允许 | 唯一后端对外入口 |
 | `/api/` 整个目录 | 拒绝 | `api/.htaccess`；宝塔需 Nginx 规则 |
-| `config.toml` / `config.toml.bak` / `config.toml.lock` | 拒绝 | 根 `.htaccess`；宝塔需 Nginx 扩展名规则 |
+| `config.toml` / `config.toml.lock` / `config_backups/` | 拒绝 | 根 `.htaccess`；宝塔需 Nginx 规则 |
 | `schema.sql` / `weather.db*` / `.user.ini` / `.htaccess` | 拒绝 | 根 `.htaccess`；宝塔需 Nginx 规则 |
 | `README.md` / `mulu.md` / `doc/*.md` | 拒绝 | 同上 |
 
@@ -101,7 +101,7 @@
 - **必需（api/ 目录）**：`config.php`、`toml.php`、`helpers.php`、`db.php`、`auth.php`、`rate_limit.php`、`amap.php`、`api_auth.php`、`api_weather.php`、`api_cities.php`、`api_admin.php`；
 - **按环境需要**：`.htaccess` 与 `api/.htaccess`（Apache）、`.user.ini`（宝塔/PHP-FPM 建议）、Nginx 规则（宝塔/通用 Nginx 必须）；
 - **可选**：`README.md`、`example_config.toml`、`doc/`、`mulu.md`；
-- **不要上传**：`.codeartsdoer/`、`.git/`、`.gitignore`、`api/config_backups/`、`api/config.snapshot`、本地生成的 `weather.db*`（迁移场景除外）。
+- **不要上传**：`.codeartsdoer/`、`.git/`、`.gitignore`、`config_backups/`、`config_backups/.snapshot`、本地生成的 `weather.db*`（迁移场景除外）。
 
 详细步骤见 [DEPLOY.md 4.2](DEPLOY.md#42-上传文件)。
 
@@ -191,9 +191,9 @@
 
 **读写与热重载：**
 
-- `api/toml.php` 负责解析/序列化；保存时使用文件锁 + 临时文件 + `rename` 原子替换，并生成 `config.toml.bak`；
-- 自动备份：保存配置或检测到外部修改时，写入 `api/config_backups/config-时间戳.toml`（保留最近 20 份）；检测快照为 `api/config.snapshot`；
-- 恢复：把 `api/config_backups/` 中需要的备份复制为根目录 `config.toml`；恢复前建议先备份当前文件；
+- `api/toml.php` 负责解析/序列化；保存时使用文件锁 + 临时文件 + `rename` 原子替换，并写入根目录 `config_backups/`；
+- 自动备份：保存配置或检测到外部修改时，写入 `config_backups/config-时间戳.toml`（保留最近 20 份）；检测快照为 `config_backups/.snapshot`；
+- 恢复：把 `config_backups/` 中需要的备份复制为根目录 `config.toml`；恢复前建议先备份当前文件；
 - `config_all()` 每次调用检查 `config.toml` 的 `mtime/size`，外部修改后自动重载；
 - `timezone`、`language`、`app_version`、`database_path` 属于请求级配置，下一次请求生效；其余业务配置保存后立即生效；
 - 配置目录与文件必须对 PHP 运行用户可写（宝塔为 `www`）。
@@ -444,7 +444,7 @@ find /www/wwwroot/weather.yousb.top -type f -exec chmod 644 {} \;
 
 `weather.db` 由 PHP 进程创建，无需预先建库；若已存在但只读，执行 `chown www:www weather.db*`。
 `config.toml` 需要允许 PHP 进程写入（后台保存配置），建议 `chown www:www config.toml` 并设置 `644`。
-`api/config_backups/` 与 `api/config.snapshot` 由 PHP 自动创建，需确保 `api/` 目录可写（`chown -R` 已覆盖）。
+`config_backups/` 与 `config_backups/.snapshot` 由 PHP 自动创建，需确保项目根目录可写（`chown -R` 已覆盖）。
 
 #### 8.4.5 Nginx 安全规则（重点）
 
@@ -459,6 +459,10 @@ location ~* \.(db|db-wal|db-shm|sqlite|sql|md|ini|log|toml|bak|tmp|lock)$ {
 # 后端模块目录整体禁止直接访问（根目录 api.php 与 amap-js-proxy.php 不受影响）
 location = /api { return 404; }
 location ^~ /api/ { return 404; }
+
+# 配置自动备份目录禁止直接访问（含高德 Key）
+location = /config_backups { return 404; }
+location ^~ /config_backups/ { return 404; }
 ```
 
 修改后执行 `nginx -t` 校验并重载（宝塔面板可直接点「重载配置」）。
@@ -501,7 +505,7 @@ STAMP=$(date +%F_%H%M)
 mkdir -p /www/backup/weather/$STAMP
 cp -a /www/wwwroot/weather.yousb.top/weather.db* /www/backup/weather/$STAMP/
 cp -a /www/wwwroot/weather.yousb.top/config.toml /www/backup/weather/$STAMP/
-cp -a /www/wwwroot/weather.yousb.top/api/config_backups /www/backup/weather/$STAMP/ 2>/dev/null || true
+cp -a /www/wwwroot/weather.yousb.top/config_backups /www/backup/weather/$STAMP/ 2>/dev/null || true
 ```
 
 建议每天低峰期执行；也可在宝塔「文件」中离线打包 `weather.db`、`weather.db-wal`、`weather.db-shm` 与 `config.toml`。宝塔内置的 MySQL 备份不适用于 SQLite。
@@ -536,7 +540,7 @@ cp -a /www/wwwroot/weather.yousb.top/api/config_backups /www/backup/weather/$STA
 
 | 项目 | 实现 |
 |------|------|
-| 密钥保护 | 高德 Key 仅存根目录 `config.toml`（Nginx 拒绝 `.toml`，Apache 由 `.htaccess` 拒绝；自动备份在 `api/config_backups/` 目录级 404 下）；前端通过 `api.php` / `amap-js-proxy.php` 代理，源码无明文 |
+| 密钥保护 | 高德 Key 仅存根目录 `config.toml`（Nginx 拒绝 `.toml`，Apache 由 `.htaccess` 拒绝；自动备份在 `config_backups/` 目录级 404 下）；前端通过 `api.php` / `amap-js-proxy.php` 代理，源码无明文 |
 | 密码存储 | `password_hash(PASSWORD_DEFAULT)` / `password_verify()`，禁止明文 |
 | XSS 防护 | 前端所有动态文本经 `esc()` 转义（`& < > " '`），属性值同样转义；不使用 `innerHTML` 拼接未转义数据 |
 | SQL 注入 | 全部使用 PDO 预处理；分页 LIMIT/OFFSET 强制整型拼接 |

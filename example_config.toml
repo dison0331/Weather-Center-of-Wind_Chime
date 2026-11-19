@@ -9,7 +9,7 @@
 # 注意：
 # - 本文件只是模板，程序实际读取 config.toml
 # - 修改 config.toml 后下一次请求自动热重载
-# - 保存配置或检测到外部修改时，自动备份到 api/config_backups/（保留最近 20 份），并保留 config.toml.bak
+# - 保存配置或检测到外部修改时，自动备份到根目录 config_backups/（保留最近 20 份）
 # - app_version / timezone / language / database_path 属于请求级配置，下一次请求生效
 # - 高德 Key 属于敏感信息，不要提交到公开仓库
 

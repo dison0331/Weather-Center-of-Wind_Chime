@@ -381,6 +381,10 @@ function toml_guard_snapshot($path, $snapshot, $backupDir, $keep = 20)
     if (!is_file($path)) {
         return;
     }
+    if (!toml_backup_ready($backupDir)) {
+        error_log('[config] 备份目录不可写：' . $backupDir);
+        return;
+    }
     $current = @file_get_contents($path);
     if ($current === false) {
         return;
@@ -412,6 +416,12 @@ function toml_save_file($path, array $config, $backupDir = '', $snapshot = '', $
     if (!is_dir($dir) || !is_writable($dir)) {
         throw new RuntimeException('配置目录不存在或不可写：' . $dir);
     }
+    if ($backupDir !== '') {
+        toml_backup_ready($backupDir);
+    }
+    if ($snapshot !== '') {
+        @mkdir(dirname($snapshot), 0755, true);
+    }
     $lockPath = $path . '.lock';
     $lock = @fopen($lockPath, 'c');
     if ($lock === false || !flock($lock, LOCK_EX)) {
@@ -426,7 +436,6 @@ function toml_save_file($path, array $config, $backupDir = '', $snapshot = '', $
             if ($backupDir !== '') {
                 toml_backup_copy($path, $backupDir, $keep);
             }
-            @copy($path, $path . '.bak');
         }
         $content = toml_dump($config);
         if (@file_put_contents($tmp, $content, LOCK_EX) === false) {

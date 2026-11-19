@@ -152,8 +152,8 @@ weather.db*      本地运行时数据库；首次部署由服务器自动创建
 - 不要遗漏 `schema.sql`（建库必需，保持在根目录）；
 - 不要遗漏 `api/` 目录及其中的模块（根目录 `api.php` 会按路径 `require`）；
 - `config.toml` 是唯一配置源，必须上传；需对 PHP 运行用户（宝塔 `www`）可写（后台保存需要）；
-- 后台保存会生成 `config.toml.bak` 与 `config.toml.lock`，自动备份写入 `api/config_backups/`（保留 20 份），属运行时文件，不要上传；
-- `api/config.snapshot` 为外部修改检测快照，属运行时文件，不要上传；
+- 后台保存会生成 `config.toml.lock`，自动备份写入 `config_backups/`（保留 20 份），属运行时文件，不要上传；
+- `config_backups/.snapshot` 为外部修改检测快照，属运行时文件，不要上传；
 - 不要把 `api/` 内的模块移动到根目录或改名为入口文件；
 - `.user.ini` 请使用本项目自带的修复版（旧主机路径已移除）；
 - `*.bak`、`*.zip`、`*.log` 等临时文件不要上传到站点根目录。
@@ -210,7 +210,7 @@ chown www:www /www/wwwroot/weather.yousb.top/config.toml
 chmod 644 /www/wwwroot/weather.yousb.top/config.toml
 ```
 
-自动备份写入 `api/config_backups/`，修改检测快照为 `api/config.snapshot`，同样需要 `api/` 目录可写（`chown -R www:www` 已覆盖）。
+自动备份写入 `config_backups/`，修改检测快照为 `config_backups/.snapshot`，同样需要项目根目录可写（`chown -R www:www` 已覆盖）。
 
 ### 4.7 配置 Nginx 安全规则（关键）
 
@@ -229,6 +229,10 @@ location ~* \.(db|db-wal|db-shm|sqlite|sql|md|ini|log|toml|bak|tmp|lock)$ {
 # 后端模块目录整体禁止直接访问（根目录 api.php 与 amap-js-proxy.php 不受影响）
 location = /api { return 404; }
 location ^~ /api/ { return 404; }
+
+# 配置自动备份目录禁止直接访问（含高德 Key）
+location = /config_backups { return 404; }
+location ^~ /config_backups/ { return 404; }
 ```
 
 > 如需展示项目自带的 `404.html`，在站点配置的 `server` 级别加入 `error_page 404 /404.html;`（不要放进 `location` 内）。
@@ -336,11 +340,11 @@ STAMP=$(date +%F_%H%M)
 mkdir -p /www/backup/weather/$STAMP
 cp -a /www/wwwroot/weather.yousb.top/weather.db* /www/backup/weather/$STAMP/
 cp -a /www/wwwroot/weather.yousb.top/config.toml /www/backup/weather/$STAMP/
-cp -a /www/wwwroot/weather.yousb.top/api/config_backups /www/backup/weather/$STAMP/ 2>/dev/null || true
+cp -a /www/wwwroot/weather.yousb.top/config_backups /www/backup/weather/$STAMP/ 2>/dev/null || true
 find /www/backup/weather -type f -mtime +14 -delete
 ```
 
-备份内容包含数据库三文件与 `config.toml`。恢复配置时，把 `api/config_backups/` 中的 `config-*.toml` 复制为根目录 `config.toml`，修正属主后访问 `api.php?action=ping` 验证。若安装了 `sqlite3` 命令，可用一致性更好的方式：
+备份内容包含数据库三文件与 `config.toml`。恢复配置时，把 `config_backups/` 中的 `config-*.toml` 复制为根目录 `config.toml`，修正属主后访问 `api.php?action=ping` 验证。若安装了 `sqlite3` 命令，可用一致性更好的方式：
 
 ```bash
 sqlite3 /www/wwwroot/weather.yousb.top/weather.db \
@@ -401,6 +405,8 @@ server {
     }
     location = /api { return 404; }
     location ^~ /api/ { return 404; }
+    location = /config_backups { return 404; }
+    location ^~ /config_backups/ { return 404; }
 
     location / {
         try_files $uri $uri/ =404;
@@ -576,7 +582,7 @@ https://weather.example.com,https://www.example.com
 | 提示“数据库目录不可写” | 属主/权限错误；防篡改 | `chown -R www:www`；关闭网站防篡改 |
 | 提示“数据库为只读” | 防篡改插件、文件系统只读 | 关闭防篡改或加入白名单 |
 | 提示“无法打开数据库文件” | 目录不存在、`open_basedir` 限制、磁盘满 | 检查路径/权限/磁盘；外置库需加入 `open_basedir` |
-| 提示“config.toml 语法错误” | 手写配置格式错误（引号/值类型） | 按提示行修复；或恢复 `config.toml.bak` 后重新保存 |
+| 提示“config.toml 语法错误” | 手写配置格式错误（引号/值类型） | 按提示行修复；或在 `config_backups/` 中选择备份恢复后重新保存 |
 | 后台保存配置失败 | `config.toml` 不可写、目录只读、防篡改 | `chown www:www config.toml`；关闭网站防篡改；检查 `api/` 目录写权限 |
 | 修改时区/语言/版本/数据库路径未立即生效 | 请求级配置需要下一次请求 | 刷新页面；数据库路径错误时检查 `database_path` 与目标目录权限 |
 | 登录后立即掉线 | Session 目录不可写；`open_basedir` 不含 Session 路径；域名/HTTPS 不一致 | 检查 `session.save_path` 权限与 `open_basedir`；统一域名与协议 |
@@ -705,12 +711,11 @@ location = /admin.html {
 | `weather.db-wal` | WAL 预写日志（未合并时存在） |
 | `weather.db-shm` | 共享内存索引 |
 | `config.toml` | 唯一配置源（含高德 Key，备份时需单独保护） |
-| `config.toml.bak` | 上次保存的配置快照（运行时生成） |
 | `config.toml.lock` | 配置写入文件锁（运行时生成） |
-| `api/config_backups/` | 自动备份目录（保存/外部修改时生成，保留最近 20 份） |
-| `api/config.snapshot` | 外部修改检测快照（运行时生成） |
+| `config_backups/` | 自动备份目录（保存/外部修改时生成，保留最近 20 份） |
+| `config_backups/.snapshot` | 外部修改检测快照（运行时生成） |
 
-数据库三文件需一起备份/迁移；配置迁移时同时备份 `config.toml` 与 `api/config_backups/`。数据库路径由 `database_path` / `WEATHER_DB_FILE` 决定。
+数据库三文件需一起备份/迁移；配置迁移时同时备份 `config.toml` 与 `config_backups/`。数据库路径由 `database_path` / `WEATHER_DB_FILE` 决定。
 
 ### 13.3 常用命令
 

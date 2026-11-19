@@ -41,8 +41,8 @@ if ($configFile === '') {
     $configFile = toml_resolve_path($configFile, APP_ROOT);
 }
 define('CONFIG_FILE', $configFile);
-define('CONFIG_BACKUP_DIR', API_DIR . '/config_backups');
-define('CONFIG_SNAPSHOT', API_DIR . '/config.snapshot');
+define('CONFIG_BACKUP_DIR', APP_ROOT . '/config_backups');
+define('CONFIG_SNAPSHOT', CONFIG_BACKUP_DIR . '/.snapshot');
 define('CONFIG_BACKUP_KEEP', 20);
 
 $bootConfig = toml_load_file(CONFIG_FILE);
