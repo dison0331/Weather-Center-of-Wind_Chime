@@ -135,6 +135,7 @@ api/.htaccess      Apache 下拒绝后端目录直接访问
 **可选（不影响运行）：**
 
 ```
+example_config.toml  配置模板（首次部署复制为 api/config.toml）
 doc/             交接文档
 mulu.md          目录速查
 ```

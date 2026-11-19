@@ -3,6 +3,7 @@
 > 版本：v1.1.0 ｜ 技术栈：原生 HTML/CSS/JS + PHP 7.2+（推荐 7.4/8.x）+ SQLite + TOML ｜ 数据源：高德开放平台
 >
 > 本文档面向后续开发者与接手人员，涵盖目录结构、模块职责、数据库设计、鉴权限流、调用关系、数据流向、部署与安全注意事项。
+> 根目录 [README.md](../README.md) 提供简要说明与快速开始。
 > 部署操作手册见同目录 [DEPLOY.md](DEPLOY.md)；接口明细见 [API.md](API.md)。
 
 ---
@@ -14,7 +15,7 @@
 | 用户端 | `user.html` | 单页应用：搜索联想、实时天气、预报、地图标注、关注城市、深色模式、自动刷新、注册登录 |
 | 管理后台 | `admin.html` | 单页应用：数据看板、访问日志、账号管理、系统配置、封禁管理、修改管理员密码 |
 | 后端入口 | `api.php` | 所有请求统一路由（`api.php?action=xxx`），负责鉴权、黑名单、限流、日志与统一响应 |
-| 数据存储 | `weather.db`（SQLite） | 首次请求自动建库建表，密钥与业务配置全部落库，不写死在代码中 |
+| 数据存储 | `weather.db`（SQLite）+ `api/config.toml` | 数据库只存用户与业务数据；配置在 TOML，不写死在代码中 |
 | 地图/天气 | 高德开放平台 | REST 接口由后端代理；JS API 密钥由后端动态注入 |
 
 安全设计核心：**前端源码与页面中不出现任何高德密钥**，所有密钥只存在于服务端 `api/config.toml`（位于 `/api/` 目录，整体拒绝 Web 访问）。
@@ -52,6 +53,7 @@
 │
 ├─ 数据与部署配置
 │  ├─ schema.sql            完整建表 SQL（SQLite 方言，首次访问自动执行）
+│  ├─ example_config.toml   配置模板（复制为 api/config.toml）
 │  ├─ .htaccess             Apache 根目录安全策略（宝塔 Nginx 不生效，含 404 页面）
 │  └─ .user.ini             宝塔/PHP-FPM 用户级配置（已移除旧主机的失效 open_basedir）
 │
@@ -61,6 +63,7 @@
 │  └─ weather.db-shm        共享内存索引
 │
 ├─ 文档与索引
+│  ├─ README.md             项目简要说明（快速开始 / 文档入口）
 │  ├─ mulu.md               根目录速查入口
 │  └─ doc/
 │     ├─ README.md          本文档（架构、数据流、部署、安全）
@@ -87,7 +90,7 @@
 | `api.php` / `amap-js-proxy.php` | 允许 | 唯一后端对外入口 |
 | `/api/` 整个目录 | 拒绝 | `api/.htaccess`；宝塔需 Nginx 规则 |
 | `schema.sql` / `weather.db*` / `.user.ini` / `.htaccess` | 拒绝 | 根 `.htaccess`；宝塔需 Nginx 规则 |
-| `mulu.md` / `doc/*.md` | 拒绝 | 同上 |
+| `README.md` / `mulu.md` / `doc/*.md` | 拒绝 | 同上 |
 
 > 宝塔默认使用 Nginx，`.htaccess` 不生效，必须按 8.4.5 在站点配置中加入 `location ^~ /api/ { return 404; }`。
 
@@ -96,8 +99,8 @@
 - **必需（根目录）**：`api.php`、`amap-js-proxy.php`、`index.html`、`user.html`、`admin.html`、`404.html`、`schema.sql`；
 - **必需（api/ 目录）**：`config.php`、`toml.php`、`config.toml`、`helpers.php`、`db.php`、`auth.php`、`rate_limit.php`、`amap.php`、`api_auth.php`、`api_weather.php`、`api_cities.php`、`api_admin.php`；
 - **按环境需要**：`.htaccess` 与 `api/.htaccess`（Apache）、`.user.ini`（宝塔/PHP-FPM 建议）、Nginx 规则（宝塔/通用 Nginx 必须）；
-- **可选**：`doc/`、`mulu.md`；
-- **不要上传**：`.codeartsdoer/`、本地生成的 `weather.db*`（迁移场景除外）。
+- **可选**：`README.md`、`example_config.toml`、`doc/`、`mulu.md`；
+- **不要上传**：`.codeartsdoer/`、`.git/`、`.gitignore`、本地生成的 `weather.db*`（迁移场景除外）。
 
 详细步骤见 [DEPLOY.md 4.2](DEPLOY.md#42-上传文件)。
 
@@ -156,6 +159,8 @@
 | `amap_calls` | 高德调用记录（成功率、延迟、缓存命中、错误信息），用于后台看板 |
 
 ### 4.4 配置文件（`api/config.toml`）
+
+> 首次部署可复制根目录 [example_config.toml](../example_config.toml) 为 `api/config.toml`；模板不含真实 Key。
 
 | 键 | 默认值 | 含义 |
 |----|--------|------|

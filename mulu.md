@@ -2,7 +2,7 @@
 
 > 入口页面与 `api.php` 位于项目根目录；后端模块统一放在 `api/`；唯一配置文件为 `api/config.toml`；文档统一归档在 `doc/`。
 
-完整设计：[doc/README.md](doc/README.md) ｜ 接口：[doc/API.md](doc/API.md) ｜ 部署：[doc/DEPLOY.md](doc/DEPLOY.md)
+项目说明：[README.md](README.md) ｜ 完整设计：[doc/README.md](doc/README.md) ｜ 接口：[doc/API.md](doc/API.md) ｜ 部署：[doc/DEPLOY.md](doc/DEPLOY.md)
 
 ## 1. 目录结构
 
@@ -33,6 +33,7 @@
 │
 ├─ 数据与部署配置
 │  ├─ schema.sql              建表 SQL（首次初始化自动执行）
+│  ├─ example_config.toml     配置模板（复制为 api/config.toml）
 │  ├─ .htaccess               Apache 根目录安全规则（含 404 页面）
 │  └─ .user.ini               宝塔 / PHP-FPM 用户级配置
 │
@@ -44,6 +45,7 @@
 │  └─ api/config.toml.lock    配置写入文件锁（目录级拒绝访问）
 │
 ├─ 文档与索引
+│  ├─ README.md               项目简要说明（快速开始 / 文档入口）
 │  ├─ mulu.md                 本速查（根目录快捷入口）
 │  └─ doc/
 │     ├─ README.md            架构、模块、数据流、安全
@@ -61,7 +63,7 @@
 | `api.php` / `amap-js-proxy.php` | 允许 | 唯一后端对外入口 |
 | `/api/` 整个目录（含 `config.toml`） | 拒绝 | 宝塔 Nginx `location ^~ /api/`；Apache `api/.htaccess` |
 | `schema.sql` / `weather.db*` / `.user.ini` / `.htaccess` | 拒绝 | 根 `.htaccess` 与 Nginx 扩展名规则 |
-| `mulu.md` / `doc/*.md` | 拒绝 | 同上 |
+| `README.md` / `mulu.md` / `doc/*.md` | 拒绝 | 同上 |
 
 宝塔默认使用 Nginx，`.htaccess` 不生效，必须在站点配置中加入：
 
@@ -112,6 +114,8 @@ Nginx 规则         宝塔 / 通用 Nginx 必须添加
 ### 可选
 
 ```
+README.md   项目简要说明
+example_config.toml  配置模板（部署时复制为 api/config.toml）
 doc/        交接文档，不影响运行
 mulu.md     目录速查，不影响运行
 ```
@@ -120,6 +124,8 @@ mulu.md     目录速查，不影响运行
 
 ```
 .codeartsdoer/      IDE 缓存与索引
+.git/               版本控制目录
+.gitignore          版本控制配置（可不上传）
 weather.db*         运行时生成；迁移场景除外
 api/config.toml.bak / api/config.toml.lock  运行时生成
 ```
