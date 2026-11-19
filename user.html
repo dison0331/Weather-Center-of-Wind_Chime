@@ -1,0 +1,897 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>天气中心</title>
+<meta name="referrer" content="same-origin">
+<style>
+:root{
+  --bg:#f2f6fc; --panel:#ffffff; --text:#1b2735; --muted:#6b7c93;
+  --line:#e1e9f4; --accent:#2f6fed; --accent-2:#1d4fc4; --soft:#eef4ff;
+  --shadow:0 10px 30px rgba(31,66,135,.08); --danger:#e0533d; --ok:#1f9d61;
+}
+html[data-theme="dark"]{
+  --bg:#0d1320; --panel:#151d2c; --text:#e9eff9; --muted:#93a4bd;
+  --line:#233049; --accent:#5b8dff; --accent-2:#7aa4ff; --soft:#1b2639;
+  --shadow:0 10px 30px rgba(0,0,0,.35); --danger:#ff7a63; --ok:#45c48d;
+}
+*{box-sizing:border-box}
+[hidden]{display:none !important}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--text);font:14px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;transition:background .25s,color .25s}
+button,input,select{font:inherit;color:inherit}
+button{cursor:pointer}
+a{color:var(--accent);text-decoration:none}
+
+.topbar{position:sticky;top:0;z-index:30;display:flex;align-items:center;gap:16px;padding:12px 20px;background:linear-gradient(120deg,#2f6fed,#1e4fc2 55%,#4b8cf7);color:#fff;box-shadow:0 4px 18px rgba(23,58,132,.22)}
+.brand{font-size:19px;font-weight:700;letter-spacing:.5px;white-space:nowrap}
+.brand small{font-weight:400;font-size:12px;opacity:.78;margin-left:6px}
+.search-wrap{position:relative;flex:1;max-width:520px}
+.search-wrap input{width:100%;height:40px;border:none;border-radius:10px;padding:0 14px;background:rgba(255,255,255,.94);color:#1b2735;outline:none;box-shadow:inset 0 0 0 1px rgba(255,255,255,.4)}
+.search-wrap input:focus{box-shadow:0 0 0 3px rgba(255,255,255,.35)}
+.tips{position:absolute;top:44px;left:0;right:0;background:var(--panel);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);overflow:hidden;display:none;z-index:40}
+.tips.open{display:block}
+.tip-item{display:flex;justify-content:space-between;gap:10px;padding:9px 14px;color:var(--text);cursor:pointer;border-bottom:1px solid var(--line)}
+.tip-item:last-child{border-bottom:none}
+.tip-item:hover{background:var(--soft)}
+.tip-item .tname{font-weight:600}
+.tip-item .tdist{color:var(--muted);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:45%}
+.top-actions{display:flex;align-items:center;gap:8px;margin-left:auto}
+.top-actions .who{font-size:13px;opacity:.92;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.btn{height:34px;padding:0 14px;border-radius:9px;border:1px solid rgba(255,255,255,.45);background:rgba(255,255,255,.14);color:#fff;transition:.18s}
+.btn:hover{background:rgba(255,255,255,.26)}
+.btn.solid{background:#fff;color:#1d4fc4;border-color:#fff;font-weight:600}
+.btn.solid:hover{background:#f1f5ff}
+.icon-btn{width:34px;padding:0;display:grid;place-items:center}
+
+.layout{display:grid;grid-template-columns:250px minmax(0,1fr);gap:18px;max-width:1200px;margin:20px auto 40px;padding:0 18px}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow)}
+.sidebar{padding:16px;align-self:start;position:sticky;top:80px}
+.sidebar h3{margin:0 0 10px;font-size:14px;letter-spacing:.5px;color:var(--muted);font-weight:600}
+.city-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px;max-height:52vh;overflow:auto}
+.city-list li{display:flex;align-items:center;gap:8px;padding:9px 10px;border-radius:10px;border:1px solid transparent;transition:.15s;cursor:pointer}
+.city-list li:hover{background:var(--soft)}
+.city-list li.active{background:var(--soft);border-color:var(--accent)}
+.city-list .city-empty{padding:8px 10px;color:var(--muted);font-size:12px;line-height:1.6;cursor:default;border:none;background:transparent}
+.city-list .city-empty:hover{background:transparent}
+.city-list .cname{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.city-list .cdel{border:none;background:transparent;color:var(--muted);font-size:16px;line-height:1;padding:2px 4px;border-radius:6px}
+.city-list .cdel:hover{color:var(--danger);background:rgba(224,83,61,.1)}
+.hint{margin-top:10px;font-size:12px;color:var(--muted);line-height:1.5}
+.side-foot{margin-top:14px;padding-top:12px;border-top:1px dashed var(--line)}
+.side-foot label{display:block;font-size:12px;color:var(--muted);margin-bottom:5px}
+.side-foot select{width:100%;height:34px;border-radius:8px;border:1px solid var(--line);background:var(--panel);padding:0 8px;outline:none}
+
+.content{display:flex;flex-direction:column;gap:16px;min-width:0}
+.weather-card{padding:22px;min-height:210px;position:relative;overflow:hidden}
+.weather-card::after{content:"";position:absolute;right:-60px;top:-80px;width:240px;height:240px;border-radius:50%;background:radial-gradient(circle,rgba(75,140,247,.22),transparent 70%);pointer-events:none}
+.wc-head{display:flex;align-items:flex-start;gap:16px}
+.wc-city{font-size:20px;font-weight:700}
+.wc-sub{font-size:12px;color:var(--muted);margin-top:2px}
+.wc-main{display:flex;align-items:center;gap:18px;margin-top:10px}
+.wc-temp{font-size:58px;font-weight:200;line-height:1;letter-spacing:-2px}
+.wc-temp span{font-size:20px;font-weight:400;color:var(--muted);margin-left:2px}
+.wc-icon{font-size:56px;line-height:1}
+.wc-desc{font-size:16px;font-weight:600}
+.wc-meta{font-size:12px;color:var(--muted);margin-top:4px}
+.wc-fav{position:absolute;right:20px;top:20px;z-index:2}
+.star{height:32px;padding:0 12px;border-radius:999px;border:1px solid var(--line);background:var(--panel);color:var(--text);font-size:12px}
+.star.on{border-color:#f0b429;background:rgba(240,180,41,.12);color:#c98a00}
+html[data-theme="dark"] .star.on{color:#f5c542}
+.empty{padding:34px 6px;text-align:center;color:var(--muted)}
+
+.forecast{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;padding:16px}
+.fc-day{border:1px solid var(--line);border-radius:12px;padding:12px 10px;text-align:center}
+.fc-day.today{border-color:var(--accent);background:var(--soft)}
+.fc-date{font-size:12px;color:var(--muted)}
+.fc-ico{font-size:28px;margin:6px 0}
+.fc-weather{font-size:13px;font-weight:600;min-height:20px}
+.fc-temp{font-size:12px;color:var(--muted);margin-top:4px}
+.fc-wind{font-size:11px;color:var(--muted);margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+.map-panel{padding:0;overflow:hidden}
+.map-head{display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--line);font-size:13px;color:var(--muted)}
+.map-head b{color:var(--text)}
+#map{width:100%;height:360px;background:var(--soft)}
+.map-fallback{display:grid;place-items:center;height:100%;color:var(--muted);font-size:13px;text-align:center;padding:20px}
+.map-info{min-width:150px;font-size:13px;line-height:1.6;color:#1b2735}
+.map-info b{font-size:15px}
+
+.statusbar{display:flex;flex-wrap:wrap;gap:10px 18px;padding:10px 16px;font-size:12px;color:var(--muted)}
+.statusbar b{color:var(--text);font-weight:600}
+.dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--ok);margin-right:5px}
+
+.modal-mask{position:fixed;inset:0;background:rgba(12,20,34,.5);backdrop-filter:blur(2px);display:none;place-items:center;z-index:80;padding:20px}
+.modal-mask.open{display:grid}
+.modal{width:100%;max-width:380px;background:var(--panel);border-radius:16px;padding:22px;box-shadow:0 30px 80px rgba(0,0,0,.3);position:relative}
+.modal h3{margin:0 0 14px;font-size:18px}
+.modal .close{position:absolute;right:12px;top:10px;border:none;background:transparent;font-size:22px;color:var(--muted);line-height:1}
+.tabs{display:flex;gap:6px;margin-bottom:16px;background:var(--soft);border-radius:10px;padding:4px}
+.tabs button{flex:1;height:32px;border:none;border-radius:8px;background:transparent;color:var(--muted);font-size:13px}
+.tabs button.active{background:var(--panel);color:var(--text);font-weight:600;box-shadow:0 2px 8px rgba(0,0,0,.08)}
+.field{display:block;margin-bottom:12px}
+.field span{display:block;font-size:12px;color:var(--muted);margin-bottom:5px}
+.field input{width:100%;height:38px;border-radius:9px;border:1px solid var(--line);background:var(--bg);padding:0 12px;outline:none}
+.field input:focus{border-color:var(--accent)}
+.form-error{min-height:18px;font-size:12px;color:var(--danger);margin:2px 0 10px}
+.submit{width:100%;height:40px;border:none;border-radius:10px;background:linear-gradient(120deg,var(--accent),var(--accent-2));color:#fff;font-weight:600}
+.submit:disabled{opacity:.6;cursor:not-allowed}
+.form-tip{font-size:11px;color:var(--muted);margin-top:10px;text-align:center}
+
+.toast{position:fixed;left:50%;bottom:34px;transform:translate(-50%,20px);background:#1b2735;color:#fff;padding:10px 18px;border-radius:999px;font-size:13px;opacity:0;pointer-events:none;transition:.22s;z-index:90;max-width:80vw;text-align:center}
+.toast.show{opacity:1;transform:translate(-50%,0)}
+html[data-theme="dark"] .toast{background:#2a3a56}
+
+@media (max-width:920px){
+  .layout{grid-template-columns:minmax(0,1fr);margin-top:14px}
+  .sidebar{position:static;order:2}
+  .content{order:1}
+  .forecast{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .topbar{flex-wrap:wrap;padding:10px 14px}
+  .search-wrap{order:3;flex-basis:100%;max-width:none}
+  .brand small{display:none}
+  .wc-temp{font-size:46px}
+}
+@media (max-width:520px){
+  .forecast{grid-template-columns:1fr}
+  .wc-icon{font-size:44px}
+}
+</style>
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">天气中心<small>AMap Weather</small></div>
+  <div class="search-wrap">
+    <input id="searchInput" type="text" placeholder="搜索城市或地点，例如：深圳、杭州西湖" autocomplete="off" aria-label="搜索城市">
+    <div id="tipList" class="tips" role="listbox"></div>
+  </div>
+  <div class="top-actions">
+    <button id="themeBtn" class="btn icon-btn" title="切换主题" aria-label="切换主题">🌙</button>
+    <span id="whoami" class="who" hidden></span>
+    <button id="loginBtn" class="btn solid" hidden>登录</button>
+    <button id="registerBtn" class="btn" hidden>注册</button>
+    <button id="logoutBtn" class="btn" hidden>退出</button>
+  </div>
+</header>
+
+<main class="layout">
+  <aside class="sidebar panel">
+    <h3>我的关注</h3>
+    <ul id="cityList" class="city-list"></ul>
+    <div id="cityHint" class="hint">登录后可收藏常用城市，一键切换查看天气。</div>
+    <div class="side-foot">
+      <label for="refreshSelect">自动刷新</label>
+      <select id="refreshSelect">
+        <option value="0">关闭</option>
+        <option value="60">每 1 分钟</option>
+        <option value="300">每 5 分钟</option>
+        <option value="600">每 10 分钟</option>
+        <option value="1800">每 30 分钟</option>
+      </select>
+    </div>
+  </aside>
+
+  <section class="content">
+    <div id="weatherCard" class="weather-card panel">
+      <div class="empty">在地图上方搜索城市，查看实时天气</div>
+    </div>
+    <div id="forecastPanel" class="forecast panel" hidden></div>
+
+    <div class="map-panel panel">
+      <div class="map-head"><span>地图标注</span><b id="mapLabel">等待查询</b><span style="margin-left:auto">数据来源：高德开放平台</span></div>
+      <div id="map"><div class="map-fallback" id="mapFallback">地图加载中…</div></div>
+    </div>
+
+    <div class="statusbar panel">
+      <span><i class="dot"></i><span id="statusText">初始化中</span></span>
+      <span>当前时间：<b id="serverTime">--</b></span>
+      <span>上次更新：<b id="lastUpdate">--</b></span>
+      <span id="cacheFlag">缓存：--</span>
+    </div>
+  </section>
+</main>
+
+<div id="modalMask" class="modal-mask" role="dialog" aria-modal="true">
+  <div class="modal">
+    <button class="close" id="modalClose" aria-label="关闭">×</button>
+    <h3 id="modalTitle">登录账号</h3>
+    <div class="tabs">
+      <button type="button" data-tab="login" class="active">登录</button>
+      <button type="button" data-tab="register" id="tabRegister">注册</button>
+    </div>
+    <form id="authForm" novalidate>
+      <label class="field"><span>账号</span><input id="authUsername" type="text" autocomplete="username" maxlength="20" placeholder="3-20 位字母、数字或中文"></label>
+      <label class="field"><span>密码</span><input id="authPassword" type="password" autocomplete="current-password" maxlength="72" placeholder="至少 6 位"></label>
+      <div id="authError" class="form-error"></div>
+      <button id="authSubmit" class="submit" type="submit">登录</button>
+    </form>
+    <div id="authTip" class="form-tip">登录后享受账号级更高请求配额，并可关注城市。</div>
+  </div>
+</div>
+
+<div id="toast" class="toast" role="status"></div>
+
+<!-- 高德 JS API 由后端代理加载，前端源码不含任何明文密钥 -->
+<script src="amap-js-proxy.php"></script>
+<script>
+(function () {
+  'use strict';
+
+  var state = {
+    fp: '',
+    token: '',
+    me: null,
+    config: {},
+    current: null,
+    cities: [],
+    map: null,
+    marker: null,
+    infoWindow: null,
+    pendingLocate: null,
+    autoTimer: null,
+    authTab: 'login',
+    busy: false
+  };
+
+  var STORE = {
+    fp: 'weather_fp',
+    token: 'weather_token',
+    theme: 'weather_theme',
+    last: 'weather_last_city',
+    refresh: 'weather_refresh'
+  };
+
+  var ESC_MAP = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+  function esc(value) {
+    return String(value == null ? '' : value).replace(/[&<>"']/g, function (ch) { return ESC_MAP[ch]; });
+  }
+  function $(id) { return document.getElementById(id); }
+
+  function toast(message) {
+    var el = $('toast');
+    el.textContent = String(message || '');
+    el.classList.add('show');
+    clearTimeout(toast._timer);
+    toast._timer = setTimeout(function () { el.classList.remove('show'); }, 2600);
+  }
+
+  var ICONS = [
+    { keys: ['雷'], icon: '⛈️' },
+    { keys: ['雪', '冰'], icon: '❄️' },
+    { keys: ['雨'], icon: '🌧️' },
+    { keys: ['雾', '霾'], icon: '🌫️' },
+    { keys: ['沙', '尘', '风'], icon: '💨' },
+    { keys: ['阴'], icon: '☁️' },
+    { keys: ['多云'], icon: '⛅' },
+    { keys: ['晴'], icon: '☀️' }
+  ];
+  function weatherIcon(text) {
+    text = String(text || '');
+    for (var i = 0; i < ICONS.length; i++) {
+      for (var j = 0; j < ICONS[i].keys.length; j++) {
+        if (text.indexOf(ICONS[i].keys[j]) !== -1) return ICONS[i].icon;
+      }
+    }
+    return '🌤️';
+  }
+
+  function buildFingerprint() {
+    var parts = [
+      navigator.userAgent || '',
+      navigator.language || '',
+      navigator.platform || '',
+      screen.width + 'x' + screen.height,
+      String(screen.colorDepth || ''),
+      String(new Date().getTimezoneOffset()),
+      String(navigator.hardwareConcurrency || ''),
+      String(navigator.deviceMemory || '')
+    ];
+    try {
+      var canvas = document.createElement('canvas');
+      canvas.width = 200; canvas.height = 50;
+      var ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.textBaseline = 'top';
+        ctx.font = '14px Arial';
+        ctx.fillStyle = '#f60';
+        ctx.fillRect(0, 0, 100, 25);
+        ctx.fillStyle = '#069';
+        ctx.fillText('weather-fp-' + (navigator.language || ''), 2, 2);
+        parts.push(canvas.toDataURL());
+      }
+    } catch (e) { /* canvas 不可用时退化为其它字段 */ }
+    var str = parts.join('::');
+    var h1 = 0x811c9dc5, h2 = 0x1000193;
+    for (var i = 0; i < str.length; i++) {
+      var ch = str.charCodeAt(i);
+      h1 ^= ch;
+      h1 = Math.imul(h1, 0x01000193);
+      h2 = (Math.imul(h2, 31) + ch) >>> 0;
+    }
+    function hex(n) { return ('0000000' + (n >>> 0).toString(16)).slice(-8); }
+    return hex(h1) + hex(h2);
+  }
+
+  async function rawApi(action, params, method) {
+    var headers = { 'X-Fingerprint': state.fp };
+    if (state.token) headers['X-Guest-Token'] = state.token;
+    var url = 'api.php?action=' + encodeURIComponent(action);
+    var options = { method: method || 'POST', headers: headers, credentials: 'same-origin' };
+    if (options.method === 'GET') {
+      var qs = new URLSearchParams(params || {}).toString();
+      if (qs) url += '&' + qs;
+    } else {
+      headers['Content-Type'] = 'application/json';
+      options.body = JSON.stringify(params || {});
+    }
+    var response = await fetch(url, options);
+    var json;
+    try {
+      json = await response.json();
+    } catch (e) {
+      throw new Error('服务器响应异常');
+    }
+    if (!json || typeof json.code !== 'number') {
+      throw new Error('服务器响应格式错误');
+    }
+    if (json.code !== 0) {
+      var err = new Error(json.message || '请求失败');
+      err.code = json.code;
+      throw err;
+    }
+    return json.data;
+  }
+
+  async function ensureGuest(force) {
+    if (state.token && !force) return;
+    var data = await rawApi('guest_init', { fingerprint: state.fp }, 'POST');
+    state.token = data.token;
+    localStorage.setItem(STORE.token, data.token);
+  }
+
+  async function api(action, params, method, retried) {
+    try {
+      if (action !== 'guest_init' && action !== 'ping' && action !== 'config_public' && action !== 'me') {
+        await ensureGuest(false);
+      }
+      return await rawApi(action, params, method);
+    } catch (e) {
+      if (e && e.code === 1002 && !retried) {
+        state.token = '';
+        await ensureGuest(true);
+        return api(action, params, method, true);
+      }
+      throw e;
+    }
+  }
+
+  function setLoading(text) {
+    $('statusText').textContent = text || '加载中…';
+  }
+
+  function renderIdentity() {
+    var isUser = state.me && state.me.type === 'user';
+    var user = isUser ? state.me.user : null;
+    $('loginBtn').hidden = isUser;
+    $('logoutBtn').hidden = !isUser;
+    $('whoami').hidden = !isUser;
+    $('whoami').textContent = isUser ? (user.username + (user.role === 'admin' ? '（管理员）' : '')) : '';
+    $('registerBtn').hidden = isUser || !state.config.register_enabled;
+    $('cityHint').textContent = isUser
+      ? '点击天气卡片右上角的星标可以收藏当前城市。'
+      : '登录后可收藏常用城市，一键切换查看天气。';
+    if (isUser && user && user.role === 'admin') {
+      $('whoami').title = '可前往 admin.html 管理后台';
+    }
+  }
+
+  function renderCityList() {
+    var list = $('cityList');
+    if (!state.cities.length) {
+      var emptyTip = (state.me && state.me.type === 'user')
+        ? '暂无关注城市，查询后在天气卡片点击「☆ 关注城市」'
+        : '登录后可关注城市';
+      list.innerHTML = '<li class="city-empty">' + esc(emptyTip) + '</li>';
+      return;
+    }
+    var html = '';
+    state.cities.forEach(function (city) {
+      var active = state.current && (state.current.adcode && city.adcode === state.current.adcode ||
+        (!state.current.adcode && city.city_name === state.current.city));
+      html += '<li class="' + (active ? 'active' : '') + '" data-city="' + esc(city.city_name) + '" data-adcode="' + esc(city.adcode) + '">' +
+        '<span class="cname">' + esc(city.city_name) + '</span>' +
+        '<button class="cdel" data-del="' + esc(city.id) + '" title="取消关注">×</button></li>';
+    });
+    list.innerHTML = html;
+  }
+
+  function renderWeather(data, label) {
+    var card = $('weatherCard');
+    var live = (data.lives && data.lives[0]) || null;
+    var forecast = (data.forecasts && data.forecasts[0]) || null;
+
+    if (!live && !forecast) {
+      card.innerHTML = '<div class="empty">未获取到该地区的天气数据，请更换城市重试</div>';
+      $('forecastPanel').hidden = true;
+      return;
+    }
+
+    var cityName = label || (live && live.city) || (forecast && forecast.city) || '未知地区';
+    var province = (live && live.province) || (forecast && forecast.province) || '';
+    var hasLive = !!(live && live.temperature !== undefined && live.temperature !== null
+      && String(live.temperature).trim() !== '' && String(live.temperature).trim() !== '[]');
+    var todayCast = forecast && forecast.casts && forecast.casts[0] ? forecast.casts[0] : null;
+    var weather = (live && live.weather) || (todayCast && todayCast.dayweather) || '--';
+    var temperature = hasLive
+      ? String(live.temperature)
+      : (todayCast ? String(todayCast.nighttemp) + '° ~ ' + String(todayCast.daytemp) + '°' : '--');
+    var tempUnit = hasLive ? '<span>°C</span>' : '';
+    var wind = hasLive
+      ? ((live.winddirection || '') + (live.windpower ? ' ' + live.windpower + '级' : ''))
+      : '';
+    var humidity = hasLive && live.humidity !== undefined && live.humidity !== null
+      ? String(live.humidity).trim() : '';
+    var reporttime = (live && live.reporttime) || (forecast && forecast.reporttime) || '--';
+    var metaText = hasLive
+      ? ((wind ? esc(wind) : '风向未知') + ' · 湿度 ' + (humidity !== '' ? esc(humidity) + '%' : '--%'))
+      : '实时观测暂缺，当前展示今日预报温度范围';
+
+    var favCity = state.current || { city: cityName, adcode: (live && live.adcode) || (forecast && forecast.adcode) || '' };
+    var isFav = state.cities.some(function (c) {
+      return (favCity.adcode && c.adcode === favCity.adcode) || c.city_name === cityName;
+    });
+    var canFav = state.me && state.me.type === 'user';
+
+    card.innerHTML =
+      '<div class="wc-fav"><button class="star ' + (isFav ? 'on' : '') + '" id="favBtn">' +
+        (isFav ? '★ 已关注' : '☆ 关注城市') + '</button></div>' +
+      '<div class="wc-head"><div>' +
+        '<div class="wc-city">' + esc(cityName) + '</div>' +
+        '<div class="wc-sub">' + esc(province || '实时天气') + ' · 发布时间 ' + esc(String(reporttime).slice(-8)) + '</div>' +
+      '</div></div>' +
+      '<div class="wc-main">' +
+        '<div class="wc-icon">' + weatherIcon(weather) + '</div>' +
+        '<div class="wc-temp">' + esc(temperature) + tempUnit + '</div>' +
+        '<div>' +
+          '<div class="wc-desc">' + esc(weather) + '</div>' +
+          '<div class="wc-meta">' + metaText + '</div>' +
+        '</div>' +
+      '</div>';
+
+    $('favBtn').addEventListener('click', function () {
+      if (!canFav) { openModal('login'); return; }
+      toggleFavorite(favCity, isFav);
+    });
+
+    var panel = $('forecastPanel');
+    if (forecast && Array.isArray(forecast.casts) && forecast.casts.length) {
+      var html = '';
+      forecast.casts.slice(0, 4).forEach(function (cast, index) {
+        html += '<div class="fc-day' + (index === 0 ? ' today' : '') + '">' +
+          '<div class="fc-date">' + esc(index === 0 ? '今天' : cast.date) + '</div>' +
+          '<div class="fc-ico">' + weatherIcon(cast.dayweather) + '</div>' +
+          '<div class="fc-weather">' + esc(cast.dayweather) + '</div>' +
+          '<div class="fc-temp">' + esc(cast.nighttemp) + '° ~ ' + esc(cast.daytemp) + '°</div>' +
+          '<div class="fc-wind">' + esc((cast.daywind || '') + ' ' + (cast.daypower || '') + '级') + '</div>' +
+        '</div>';
+      });
+      panel.innerHTML = html;
+      panel.hidden = false;
+    } else {
+      panel.hidden = true;
+      panel.innerHTML = '';
+    }
+
+    $('lastUpdate').textContent = new Date().toLocaleTimeString('zh-CN', { hour12: false });
+    $('cacheFlag').textContent = '缓存：' + (data.cached ? '命中（高德结果缓存）' : '实时请求');
+    $('mapLabel').textContent = cityName;
+  }
+
+  function setMapFallback(text) {
+    var container = $('map');
+    container.innerHTML = '<div class="map-fallback">' + esc(text) + '</div>';
+  }
+
+  async function initMap() {
+    if (!state.config.amap_ready) {
+      setMapFallback('地图服务未配置：管理员可在后台填写高德 JS API Key 与安全密钥');
+      return;
+    }
+    if (!window.__AMAP_READY || typeof window.__AMAP_READY.then !== 'function') {
+      setMapFallback('地图加载器未就绪');
+      return;
+    }
+    try {
+      var AMap = await window.__AMAP_READY;
+      if (!AMap) throw new Error('SDK 未返回');
+      var dark = document.documentElement.getAttribute('data-theme') === 'dark';
+      state.map = new AMap.Map('map', {
+        zoom: 10,
+        center: [114.06, 22.55],
+        mapStyle: dark ? 'amap://styles/dark' : 'amap://styles/normal'
+      });
+      if (state.pendingLocate) {
+        locateOnMap(state.pendingLocate[0], state.pendingLocate[1], state.pendingLocate[2], state.pendingLocate[3]);
+        state.pendingLocate = null;
+      }
+    } catch (e) {
+      setMapFallback('地图加载失败，请检查高德 Key 配置或网络');
+    }
+  }
+
+  function locateOnMap(lng, lat, label, weatherText) {
+    if (!state.map) {
+      state.pendingLocate = [lng, lat, label, weatherText];
+      return;
+    }
+    var AMap = window.AMap;
+    state.map.setZoomAndCenter(10, [lng, lat]);
+    if (state.marker) {
+      state.marker.setMap(null);
+      state.marker = null;
+    }
+    if (state.infoWindow) {
+      state.infoWindow.close();
+    }
+    state.marker = new AMap.Marker({ position: [lng, lat], title: label });
+    state.marker.setMap(state.map);
+    state.infoWindow = new AMap.InfoWindow({
+      offset: new AMap.Pixel(0, -30),
+      content: '<div class="map-info"><b>' + esc(label) + '</b><br>天气：' + esc(weatherText || '--') + '</div>'
+    });
+    state.infoWindow.open(state.map, [lng, lat]);
+  }
+
+  async function queryCity(cityName, adcode, location, silent) {
+    if (!cityName) return;
+    if (!silent) setLoading('正在查询 ' + cityName + ' 的天气…');
+    var queryTarget = adcode || cityName;
+    try {
+      var data = await api('weather', { city: queryTarget });
+      var resolvedAdcode = (data && data.adcode) ? String(data.adcode) : (adcode || '');
+      state.current = { city: cityName, adcode: resolvedAdcode };
+      localStorage.setItem(STORE.last, JSON.stringify(state.current));
+      renderWeather(data, cityName);
+      renderCityList();
+      setLoading('查询完成');
+
+      var text = (data.lives && data.lives[0] && data.lives[0].weather) || '';
+      if (location && location.indexOf(',') !== -1) {
+        var parts = location.split(',').map(Number);
+        locateOnMap(parts[0], parts[1], cityName, text);
+      } else {
+        try {
+          var geo = await api('geocode', { address: cityName });
+          if (geo.geocodes && geo.geocodes.length && geo.geocodes[0].location) {
+            var ll = geo.geocodes[0].location.split(',').map(Number);
+            locateOnMap(ll[0], ll[1], cityName, text);
+          }
+        } catch (e) {
+          setLoading('天气已更新，地图定位失败');
+        }
+      }
+    } catch (e) {
+      setLoading('查询失败');
+      if (!silent) toast(e.message || '查询失败');
+    }
+  }
+
+  function debounce(fn, wait) {
+    var timer = null;
+    return function () {
+      var args = arguments, self = this;
+      clearTimeout(timer);
+      timer = setTimeout(function () { fn.apply(self, args); }, wait);
+    };
+  }
+
+  var searchInput = $('searchInput');
+  var tipList = $('tipList');
+
+  function hideTips() {
+    tipList.classList.remove('open');
+    tipList.innerHTML = '';
+  }
+
+  function renderTips(tips) {
+    if (!tips || !tips.length) {
+      hideTips();
+      return;
+    }
+    var html = '';
+    tips.forEach(function (tip) {
+      html += '<div class="tip-item" role="option" data-name="' + esc(tip.name) + '" data-adcode="' + esc(tip.adcode) + '" data-location="' + esc(tip.location) + '">' +
+        '<span class="tname">' + esc(tip.name) + '</span>' +
+        '<span class="tdist">' + esc(tip.district || tip.address || '') + '</span></div>';
+    });
+    tipList.innerHTML = html;
+    tipList.classList.add('open');
+  }
+
+  var onSearch = debounce(async function () {
+    var keyword = searchInput.value.trim();
+    if (!keyword) { hideTips(); return; }
+    try {
+      var data = await api('tips', { keywords: keyword });
+      renderTips(data.tips);
+    } catch (e) {
+      hideTips();
+    }
+  }, 280);
+
+  searchInput.addEventListener('input', onSearch);
+  searchInput.addEventListener('keydown', function (event) {
+    if (event.key === 'Escape') hideTips();
+    if (event.key === 'Enter' && searchInput.value.trim()) {
+      hideTips();
+      queryCity(searchInput.value.trim());
+    }
+  });
+
+  tipList.addEventListener('click', function (event) {
+    var item = event.target.closest('.tip-item');
+    if (!item) return;
+    var name = item.getAttribute('data-name');
+    var adcode = item.getAttribute('data-adcode');
+    var location = item.getAttribute('data-location');
+    searchInput.value = name;
+    hideTips();
+    queryCity(name, adcode, location);
+  });
+
+  document.addEventListener('click', function (event) {
+    if (!event.target.closest('.search-wrap')) hideTips();
+  });
+
+  $('cityList').addEventListener('click', function (event) {
+    var del = event.target.closest('[data-del]');
+    if (del) {
+      event.stopPropagation();
+      removeFavorite(Number(del.getAttribute('data-del')));
+      return;
+    }
+    var li = event.target.closest('li[data-city]');
+    if (li) {
+      queryCity(li.getAttribute('data-city'), li.getAttribute('data-adcode'));
+    }
+  });
+
+  async function loadCities() {
+    if (!state.me || state.me.type !== 'user') {
+      state.cities = [];
+      renderCityList();
+      return;
+    }
+    try {
+      var data = await api('cities_list');
+      state.cities = data.cities || [];
+    } catch (e) {
+      state.cities = [];
+    }
+    renderCityList();
+  }
+
+  async function toggleFavorite(city, isFav) {
+    if (isFav) {
+      var target = state.cities.find(function (c) {
+        return (city.adcode && c.adcode === city.adcode) || c.city_name === city.city;
+      });
+      if (target) {
+        removeFavorite(target.id);
+      }
+      return;
+    }
+    try {
+      await api('cities_add', { city_name: city.city, adcode: city.adcode || '' });
+      toast('已关注 ' + city.city);
+      await loadCities();
+      var data = await api('weather', { city: city.adcode || city.city });
+      renderWeather(data, city.city);
+    } catch (e) {
+      toast(e.message || '关注失败');
+    }
+  }
+
+  async function removeFavorite(id) {
+    try {
+      await api('cities_del', { id: id });
+      toast('已取消关注');
+      await loadCities();
+      if (state.current) {
+        var data = await api('weather', { city: state.current.adcode || state.current.city });
+        renderWeather(data, state.current.city);
+      }
+    } catch (e) {
+      toast(e.message || '操作失败');
+    }
+  }
+
+  function applyTheme(theme) {
+    document.documentElement.setAttribute('data-theme', theme === 'dark' ? 'dark' : 'light');
+    $('themeBtn').textContent = theme === 'dark' ? '☀️' : '🌙';
+    localStorage.setItem(STORE.theme, theme);
+    if (state.map) {
+      state.map.setMapStyle(theme === 'dark' ? 'amap://styles/dark' : 'amap://styles/normal');
+    }
+  }
+
+  $('themeBtn').addEventListener('click', function () {
+    var next = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+    applyTheme(next);
+  });
+
+  function setupAutoRefresh() {
+    if (state.autoTimer) {
+      clearInterval(state.autoTimer);
+      state.autoTimer = null;
+    }
+    var seconds = Number($('refreshSelect').value) || 0;
+    localStorage.setItem(STORE.refresh, String(seconds));
+    if (seconds > 0) {
+      state.autoTimer = setInterval(function () {
+        if (state.current) {
+          queryCity(state.current.city, state.current.adcode, null, true);
+        }
+      }, seconds * 1000);
+    }
+  }
+
+  $('refreshSelect').addEventListener('change', function () {
+    setupAutoRefresh();
+    toast(Number($('refreshSelect').value) > 0 ? '已开启自动刷新' : '已关闭自动刷新');
+  });
+
+  function openModal(tab) {
+    state.authTab = tab === 'register' && state.config.register_enabled ? 'register' : 'login';
+    $('modalMask').classList.add('open');
+    $('authError').textContent = '';
+    switchTab(state.authTab);
+    setTimeout(function () { $('authUsername').focus(); }, 80);
+  }
+
+  function closeModal() {
+    $('modalMask').classList.remove('open');
+  }
+
+  function switchTab(tab) {
+    state.authTab = tab;
+    var isRegister = tab === 'register';
+    var tabs = document.querySelectorAll('.tabs button');
+    for (var i = 0; i < tabs.length; i++) {
+      tabs[i].classList.toggle('active', tabs[i].getAttribute('data-tab') === tab);
+    }
+    $('modalTitle').textContent = isRegister ? '注册账号' : '登录账号';
+    $('authSubmit').textContent = isRegister ? '注册并登录' : '登录';
+    $('authPassword').setAttribute('autocomplete', isRegister ? 'new-password' : 'current-password');
+    $('authTip').textContent = isRegister
+      ? '注册后可关注城市，并提升请求配额。'
+      : '登录后享受账号级更高请求配额，并可关注城市。';
+  }
+
+  $('tabRegister').hidden = false;
+  document.querySelector('.tabs').addEventListener('click', function (event) {
+    var btn = event.target.closest('button[data-tab]');
+    if (btn) switchTab(btn.getAttribute('data-tab'));
+  });
+
+  $('loginBtn').addEventListener('click', function () { openModal('login'); });
+  $('registerBtn').addEventListener('click', function () { openModal('register'); });
+  $('modalClose').addEventListener('click', closeModal);
+  $('modalMask').addEventListener('click', function (event) {
+    if (event.target === $('modalMask')) closeModal();
+  });
+  document.addEventListener('keydown', function (event) {
+    if (event.key === 'Escape') closeModal();
+  });
+
+  $('authForm').addEventListener('submit', async function (event) {
+    event.preventDefault();
+    var username = $('authUsername').value.trim();
+    var password = $('authPassword').value;
+    var errorBox = $('authError');
+    errorBox.textContent = '';
+    if (!username || !password) {
+      errorBox.textContent = '请输入账号和密码';
+      return;
+    }
+    var submit = $('authSubmit');
+    submit.disabled = true;
+    var action = state.authTab === 'register' ? 'register' : 'login';
+    submit.textContent = action === 'register' ? '注册中…' : '登录中…';
+    try {
+      await rawApi(action, { username: username, password: password, fingerprint: state.fp }, 'POST');
+      state.me = await rawApi('me', {}, 'GET');
+      renderIdentity();
+      await loadCities();
+      closeModal();
+      toast(action === 'register' ? '注册成功，已自动登录' : '登录成功');
+    } catch (e) {
+      errorBox.textContent = e.message || '操作失败';
+    } finally {
+      submit.disabled = false;
+      switchTab(state.authTab);
+    }
+  });
+
+  $('logoutBtn').addEventListener('click', async function () {
+    try {
+      await rawApi('logout', {}, 'POST');
+    } catch (e) { /* 忽略 */ }
+    state.me = { type: 'guest' };
+    state.cities = [];
+    renderIdentity();
+    renderCityList();
+    toast('已退出登录');
+    ensureGuest(true).catch(function () { });
+  });
+
+  async function boot() {
+    var savedFp = localStorage.getItem(STORE.fp);
+    state.fp = savedFp && /^[A-Za-z0-9_-]{8,80}$/.test(savedFp) ? savedFp : buildFingerprint();
+    localStorage.setItem(STORE.fp, state.fp);
+
+    var savedTheme = localStorage.getItem(STORE.theme);
+    if (!savedTheme) {
+      savedTheme = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    }
+    applyTheme(savedTheme);
+
+    var savedToken = localStorage.getItem(STORE.token);
+    if (savedToken) state.token = savedToken;
+
+    try {
+      state.config = await rawApi('config_public', {}, 'GET');
+    } catch (e) {
+      $('statusText').textContent = '无法连接后端，请检查 api.php 是否可访问';
+      toast(e.message || '初始化失败');
+      return;
+    }
+    $('serverTime').textContent = state.config.server_time || '--';
+    $('registerBtn').hidden = !state.config.register_enabled;
+    $('tabRegister').hidden = !state.config.register_enabled;
+    document.title = (state.config.site_name || '天气中心');
+
+    try {
+      state.me = await api('me', {}, 'GET');
+    } catch (e) {
+      state.me = { type: 'guest' };
+    }
+    if (state.me && state.me.type === 'guest' && !state.me.has_token) {
+      state.token = '';
+      localStorage.removeItem(STORE.token);
+    }
+    renderIdentity();
+    await loadCities();
+    initMap();
+
+    var refresh = Number(localStorage.getItem(STORE.refresh));
+    if (!refresh && state.config.auto_refresh) refresh = Number(state.config.auto_refresh);
+    var options = $('refreshSelect').options;
+    for (var i = 0; i < options.length; i++) {
+      if (Number(options[i].value) === refresh) { $('refreshSelect').value = String(refresh); break; }
+    }
+    setupAutoRefresh();
+
+    var saved = null;
+    try { saved = JSON.parse(localStorage.getItem(STORE.last) || 'null'); } catch (e) { saved = null; }
+    if (saved && saved.city) {
+      queryCity(saved.city, saved.adcode || '');
+    } else {
+      queryCity(state.config.default_city || '深圳');
+    }
+
+    setInterval(function () {
+      $('serverTime').textContent = new Date().toLocaleTimeString('zh-CN', { hour12: false });
+    }, 30000);
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', boot);
+  } else {
+    boot();
+  }
+})();
+</script>
+</body>
+</html>

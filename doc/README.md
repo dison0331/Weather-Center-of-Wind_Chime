@@ -1,0 +1,543 @@
+# 天气中心 · 系统设计与交接文档
+
+> 版本：v1.0.2 ｜ 技术栈：原生 HTML/CSS/JS + PHP 7.2+（推荐 7.4/8.x）+ SQLite ｜ 数据源：高德开放平台
+>
+> 本文档面向后续开发者与接手人员，涵盖目录结构、模块职责、数据库设计、鉴权限流、调用关系、数据流向、部署与安全注意事项。
+> 部署操作手册见同目录 [DEPLOY.md](DEPLOY.md)；接口明细见 [API.md](API.md)。
+
+---
+
+## 1. 系统概述
+
+| 层级 | 实现 | 说明 |
+|------|------|------|
+| 用户端 | `user.html` | 单页应用：搜索联想、实时天气、预报、地图标注、关注城市、深色模式、自动刷新、注册登录 |
+| 管理后台 | `admin.html` | 单页应用：数据看板、访问日志、账号管理、系统配置、封禁管理、修改管理员密码 |
+| 后端入口 | `api.php` | 所有请求统一路由（`api.php?action=xxx`），负责鉴权、黑名单、限流、日志与统一响应 |
+| 数据存储 | `weather.db`（SQLite） | 首次请求自动建库建表，密钥与业务配置全部落库，不写死在代码中 |
+| 地图/天气 | 高德开放平台 | REST 接口由后端代理；JS API 密钥由后端动态注入 |
+
+安全设计核心：**前端源码与页面中不出现任何高德密钥**，所有密钥只存在于服务端 SQLite 的 `system_config` 表。
+
+---
+
+## 2. 目录结构
+
+> 代码文件全部位于项目根目录（部署时即站点根目录），文档统一归档在 `doc/`。根目录速查见 [../mulu.md](../mulu.md)。
+
+```
+站点根目录/
+├─ 入口页面（浏览器可直接访问）
+│  ├─ index.html            入口导航页（用户端 / 管理后台）
+│  ├─ user.html             用户端单页应用
+│  ├─ admin.html            管理后台单页应用
+│  ├─ 404.html              静态 404 页面
+│  ├─ api.php               统一入口：CORS → Session → 身份识别 → 黑名单 → 鉴权 → 限流 → 路由 → 日志 → 统一 JSON
+│  └─ amap-js-proxy.php     JS API 安全配置输出 + SDK 动态加载器（密钥运行时注入）
+│
+├─ API 路由模块（仅被 api.php 引入，禁止直接访问）
+│  ├─ api_auth.php          公共身份接口（初始化、注册、登录、登出、me、ping）
+│  ├─ api_weather.php       天气 / 联想 / 逆地理 / 地理编码（全部走高德代理）
+│  ├─ api_cities.php        关注城市增删改查
+│  └─ api_admin.php         管理后台全部接口
+│
+├─ 公共与中间件（仅被后端引入，禁止直接访问）
+│  ├─ config.php            仅存放路径常量与时区（无任何密钥）
+│  ├─ helpers.php           统一响应、参数读取、IP/指纹、CORS、HTTP 客户端、日志写入
+│  ├─ db.php                SQLite 连接、自动建表、配置读写、GC
+│  ├─ auth.php              身份识别、黑名单校验、登录/登出封装、登录失败防护
+│  ├─ rate_limit.php        分层限流中间件（游客 IP+指纹 / 用户账号配额）
+│  └─ amap.php              高德 REST 代理：签名、缓存、调用统计、JS 配置读取
+│
+├─ 数据与部署配置
+│  ├─ schema.sql            完整建表 SQL（SQLite 方言，首次访问自动执行）
+│  ├─ .htaccess             Apache 安全策略（宝塔 Nginx 不生效）
+│  └─ .user.ini             宝塔/PHP-FPM 用户级配置（已移除旧主机的失效 open_basedir）
+│
+├─ 运行时自动生成（不要上传）
+│  ├─ weather.db            SQLite 主库
+│  ├─ weather.db-wal        WAL 模式预写日志
+│  └─ weather.db-shm        共享内存索引
+│
+├─ 文档与索引
+│  ├─ mulu.md               根目录速查入口
+│  └─ doc/
+│     ├─ README.md          本文档（架构、数据流、部署、安全）
+│     ├─ API.md             接口文档（参数、返回、错误码、示例）
+│     └─ DEPLOY.md          部署手册（宝塔 / Apache / Nginx）
+│
+└─ .codeartsdoer/           IDE 工具目录，不参与部署，不要上传
+```
+
+### 2.1 结构约定
+
+1. 所有 PHP / HTML / SQL 代码直接放在站点根目录，不新建代码子目录；
+2. 新增后端 PHP 模块后，必须同步加入宝塔 Nginx 的内部模块拒绝访问规则（见 8.4.5）；
+3. 新增文档统一放 `doc/`，并在同一次改动中同步 `doc/README.md` 与根目录 `mulu.md` 的索引；
+4. 系统配置只存数据库 `system_config` 表，不写回 `config.php`；
+5. `weather.db*` 属于运行时数据，不纳入代码交付，首次访问 `api.php?action=ping` 时自动生成。
+
+### 2.2 访问控制
+
+| 路径 | 直接访问 | 依据 |
+|------|----------|------|
+| `index.html` / `user.html` / `admin.html` / `404.html` | 允许 | 静态页面 |
+| `api.php` / `amap-js-proxy.php` | 允许 | 唯一后端对外入口 |
+| 其余 10 个 PHP 模块 | 拒绝 | `.htaccess`；宝塔需 Nginx 规则 |
+| `schema.sql` / `weather.db*` / `.user.ini` | 拒绝 | `.htaccess`；宝塔需 Nginx 规则 |
+| `mulu.md` / `doc/*.md` | 拒绝 | `.htaccess`；宝塔需 Nginx 规则 |
+
+> 宝塔默认使用 Nginx，`.htaccess` 不生效，必须按 8.4.5 在站点配置中加入拒绝规则。
+
+### 2.3 部署文件清单
+
+- **必需**：`api*.php`、`auth.php`、`rate_limit.php`、`amap.php`、`db.php`、`helpers.php`、`config.php`、`schema.sql`、`amap-js-proxy.php`、`index.html`、`user.html`、`admin.html`、`404.html`；
+- **按环境需要**：`.htaccess`（Apache 必需；宝塔 Nginx 不生效，改用 Nginx 规则）、`.user.ini`（宝塔/PHP-FPM 建议）；
+- **可选**：`doc/`、`mulu.md`；
+- **不要上传**：`.codeartsdoer/`、本地生成的 `weather.db*`（迁移场景除外）。
+
+详细步骤见 [DEPLOY.md 4.2](DEPLOY.md#42-上传文件)。
+
+---
+
+## 3. 模块职责与依赖
+
+| 文件 | 职责 | 依赖 |
+|------|------|------|
+| `config.php` | 定义 `APP_ROOT`、`DB_FILE`、`APP_TIMEZONE`、`SESSION_NAME` | 无 |
+| `helpers.php` | `json_out()` 统一响应、`fail()` 抛业务异常、`param()` 读参、`apply_cors()`、`client_ip()`、`client_fingerprint()`、`http_get()`、`log_access()` | `db.php`（配置与日志） |
+| `db.php` | PDO 单例、`db_init()` 建表种子、`get_config()` / `set_config()`、`db_gc()` | `schema.sql` |
+| `auth.php` | `identify()` 双模式识别、`enforce_blacklist()`、`require_login/admin`、`authenticate()`、`session_login/logout`、`login_fail_guard()` | `helpers.php`、`db.php` |
+| `rate_limit.php` | `rate_check()`：游客按 IP+指纹，用户按 `user_id`，管理员放行 | `db.php`、`helpers.php` |
+| `amap.php` | `amap_proxy()`：参数白名单、Key 注入、数字签名、缓存、调用统计；`amap_js_config()` | `db.php`、`helpers.php` |
+| `api.php` | 组装路由、中间件编排、统一日志与响应 | 上述全部 |
+| `api_auth.php` | `auth_*` 处理函数 + 路由数组 | `auth.php` |
+| `api_weather.php` | `wx_*` 处理函数 + 路由数组 | `amap.php` |
+| `api_cities.php` | `city_*` 处理函数 + 路由数组 | `db.php` |
+| `api_admin.php` | `adm_*` 处理函数 + 路由数组 | `db.php`、`auth.php` |
+| `amap-js-proxy.php` | 从数据库读取 JS Key / 安全密钥，输出 `window._AMapSecurityConfig` 与 `window.__AMAP_READY` | `db.php`、`amap.php` |
+
+> 路由模块约定：每个 `api_*.php` 末尾 `return [...]`，键为 action 名，值为 `['auth' => public|guest_token|user|admin, 'rate' => bool, 'amap' => bool, 'handler' => callable]`。`api.php` 用 `array_merge` 合并，便于按模块扩展。
+
+---
+
+## 4. 数据库设计
+
+建表 SQL 全文见根目录 [`schema.sql`](../schema.sql)。首次请求 `api.php` 时通过 `PRAGMA user_version < 1` 判断并自动执行，随后写入默认配置与默认管理员。
+
+### 4.1 核心四表
+
+| 表 | 关键字段 | 说明 |
+|----|----------|------|
+| `users` | `id, username(UNIQUE), password_hash, role(user/admin), status(1/0), fingerprint, last_ip, last_login_at, created_at` | 账号表；密码使用 `password_hash()` 存储；`status=0` 为封禁 |
+| `user_cities` | `id, user_id, adcode, city_name, sort_order, created_at`，`UNIQUE(user_id, city_name)` | 关注城市；`sort_order` 用于排序权重 |
+| `system_config` | `cfg_key PRIMARY KEY, cfg_value, updated_at` | 系统配置；高德 Key、限流参数、注册开关等全部在此 |
+| `access_logs` | `id, created_at, ts, ip, fingerprint, user_id, action, method, status, code, elapsed_ms, ua` | 访问日志；限流统计、看板趋势、后台日志均基于此表 |
+
+### 4.2 辅助四表
+
+| 表 | 用途 |
+|----|------|
+| `guest_tokens` | 游客令牌（token 主键、绑定 fingerprint、过期时间、吊销标记） |
+| `blacklist` | IP / 浏览器指纹黑名单，`UNIQUE(type, value)` |
+| `amap_cache` | 高德代理结果缓存（`cache_key` 主键、payload JSON、`expires_at`） |
+| `amap_calls` | 高德调用记录（成功率、延迟、缓存命中、错误信息），用于后台看板 |
+
+### 4.3 默认配置项（`system_config`，均可在后台修改）
+
+| 键 | 默认值 | 含义 |
+|----|--------|------|
+| `site_name` | 天气中心 | 站点名称 |
+| `allow_origin` | 空 | 跨域白名单，逗号分隔；空表示仅允许同源 |
+| `trust_proxy` | 0 | 是否信任 `X-Forwarded-For`（有 CDN/反代时开启） |
+| `register_enabled` | 1 | 注册开关 |
+| `default_city` | 深圳 | 用户端默认城市 |
+| `auto_refresh` | 300 | 默认自动刷新间隔（秒） |
+| `amap_web_key` / `amap_web_secret` | 空 | 后端 REST 服务 Key 与安全密钥 |
+| `amap_js_key` / `amap_js_security_code` | 空 | 前端 JS API Key 与安全密钥 |
+| `amap_daily_quota` | 5000 | 每日调用配额，用于后台估算剩余量；0 表示不限 |
+| `guest_rate_limit` | 60 | 游客每窗口业务请求上限 |
+| `guest_amap_rate_limit` | 20 | 游客每窗口高德代理请求上限（更严格） |
+| `user_rate_limit` | 120 | 登录账号每窗口配额 |
+| `rate_window` | 60 | 限流窗口（秒） |
+| `login_fail_limit` / `login_fail_window` | 10 / 600 | 登录失败次数上限与统计窗口 |
+| `guest_token_ttl` | 3600 | 游客令牌有效期（秒） |
+| `cache_ttl_weather` | 600 | 天气缓存（秒） |
+| `cache_ttl_tips` | 300 | 联想缓存（秒） |
+| `cache_ttl_regeo` / `cache_ttl_geocode` | 86400 | 逆地理 / 地理编码缓存（秒） |
+| `log_retain_days` | 30 | 日志、调用记录保留天数（GC 清理） |
+
+> `db_gc()` 以约 2% 的请求概率触发，清理过期缓存、过期令牌、超期日志与调用记录，避免表无限增长。
+
+---
+
+## 5. 鉴权、限流与封禁
+
+### 5.1 双模式身份识别（`auth.php::identify()`）
+
+```
+请求 → 有 Session(uid)?
+        ├─ 是 → 查 users；status=0 → 1008 封禁；否则 identity.type = user（取 role）
+        └─ 否 → 有 X-Guest-Token?
+                ├─ 有 → 校验：存在 / 未吊销 / 未过期 / 指纹匹配 → identity.type = guest
+                └─ 无 → 游客（无令牌）；业务接口会被 require_guest_token 拦截
+```
+
+- **登录用户**：PHP Session（`WEATHER_SESSID`，HttpOnly、SameSite=Lax、HTTPS 自动 Secure）。限流按账号配额。
+- **游客**：`guest_init` 签发一次性令牌，令牌与浏览器指纹（Canvas + UA + 屏幕等生成 16 位哈希）绑定。前端将令牌存于 `localStorage`，请求头携带 `X-Guest-Token` 与 `X-Fingerprint`。令牌过期/失效时前端自动重新初始化。
+- **一次性语义**：每次初始化签发新令牌并绑定指纹；令牌在有效期内可复用（会话级），过期、被吊销或指纹不匹配即作废。相比"每次请求换新令牌"可避免多标签页/并发请求互相失效。
+
+### 5.2 中间件顺序（`api.php`）
+
+1. `db_init()` / `db_gc()`
+2. `apply_cors()`（同源或无 Origin 放行；配置白名单时按白名单）
+3. `session_start()`
+4. `identify()`（公开初始化接口允许携带失效令牌重新初始化）
+5. `enforce_blacklist()` —— IP / 指纹在 `blacklist` 表中 → `code=1003, HTTP 403`
+6. 路由鉴权：`guest_token` / `user` / `admin`
+7. `rate_check()` —— 游客 IP+指纹双维度；用户账号维度；管理员跳过
+8. 业务处理 → 写 `access_logs` → 统一 JSON
+
+### 5.3 限流规则
+
+| 身份 | 维度 | 默认阈值 | 说明 |
+|------|------|----------|------|
+| 游客 | IP 与指纹取较大值 | 60 次/60 秒 | 高德代理接口使用 `guest_amap_rate_limit`（20 次/60 秒） |
+| 登录用户 | `user_id` | 120 次/60 秒 | 不受 IP/指纹限制 |
+| 管理员 | 不限流 | —— | 后台接口统一 `rate=false` |
+
+限流统计基于 `access_logs` 窗口内记录，排除 `ping`、`guest_init`、`me`、`login` 等初始化接口。超限返回 `code=1005, HTTP 429`，并附带 `X-RateLimit-Limit` / `X-RateLimit-Remaining` 响应头。
+
+登录防爆破：`login` / `admin_login` 在同一 IP 的失败次数达到 `login_fail_limit` 时直接 429。
+
+### 5.4 封禁
+
+- **账号封禁**：`users.status=0`，`identify()` 每次请求校验并踢掉 Session，返回 1008。
+- **IP / 指纹黑名单**：`blacklist` 表，`enforce_blacklist()` 对所有接口生效（含初始化接口），返回 1003。
+- 管理员操作约束：不能封禁当前登录账号；不能封禁最后一个可用管理员。
+
+---
+
+## 6. 密钥保护与高德代理
+
+### 6.1 REST 接口（天气 / 联想 / 逆地理 / 地理编码）
+
+前端只调用 `api.php?action=weather|tips|regeo|geocode`，后端 `amap_proxy()`：
+
+1. 从 `system_config` 读取 `amap_web_key` / `amap_web_secret`（未配置返回 2001）；
+2. 过滤空参数，构造缓存键 `amap:<service>:md5(参数)`；
+3. 命中 `amap_cache` 且未过期则直接返回并记录 `cache-hit`；
+4. 注入 `key`；若配置了安全密钥则按高德规则签名（参数 key 升序 `k=v&...` + secret 取 md5）；
+5. `http_get()`（cURL 优先，回退 `file_get_contents`）请求高德；
+6. 校验 `status=1`，失败记录 `amap_calls` 并返回通用错误（不向前端泄漏高德内部 info）；
+7. 写缓存并返回 payload。
+
+### 6.2 JS API（地图）
+
+`user.html` 只引入本地代理脚本：
+
+```html
+<script src="amap-js-proxy.php"></script>
+```
+
+该文件从数据库读取 JS Key 与安全密钥，输出：
+
+```js
+window._AMapSecurityConfig = { securityJsCode: "..." };
+window.__AMAP_READY = new Promise(...动态创建 <script src="https://webapi.amap.com/maps?v=2.0&key=...">...);
+```
+
+页面 HTML/JS 源码中没有任何 key 字面量。前端通过 `await window.__AMAP_READY` 获取 `AMap` 后初始化地图。若未配置 Key，Promise reject，页面显示占位提示，天气功能不受影响。
+
+> 注意：JS API 的 Key 最终必须由浏览器携带，运行时在开发者工具网络面板可见，这是高德 JS API 的固有机制。代码层面已做到"源码不暴露"，并建议在高德控制台配置域名白名单进一步限制。
+
+---
+
+## 7. 调用关系与数据流向
+
+```mermaid
+flowchart TD
+  U[user.html] -->|fetch api.php?action=...| API[api.php 统一入口]
+  A[admin.html] -->|fetch api.php?action=admin_*| API
+  API --> M1[CORS + Session]
+  M1 --> M2[auth.php identify]
+  M2 --> M3[enforce_blacklist]
+  M3 --> M4[rate_limit.php]
+  M4 --> R[路由分发 array_merge]
+  R --> AA[api_auth.php]
+  R --> AW[api_weather.php]
+  R --> AC[api_cities.php]
+  R --> AD[api_admin.php]
+  AW --> P[amap.php amap_proxy]
+  P -->|注入 Key + 签名| AM[高德 REST API]
+  P <--> C[(amap_cache)]
+  AA --> D[(weather.db)]
+  AC --> D
+  AD --> D
+  P --> D
+  U -->|script src| J[amap-js-proxy.php]
+  J -->|读取 DB| D
+  J -->|动态注入| SDK[高德 JS SDK]
+  API --> L[(access_logs)]
+```
+
+### 7.1 天气查询数据流
+
+```
+用户输入/选择城市
+  → user.html api('weather', {city: adcode或城市名})
+  → api.php?action=weather（携带 X-Guest-Token / X-Fingerprint 或 Session）
+  → identify → 黑名单 → require_guest_token → rate_check(amap=true)
+  → wx_weather：若 city 非 adcode，先 amap_proxy('geocode') 解析 adcode
+  → amap_proxy('weather')
+      → 查 amap_cache（10 分钟）命中则返回
+      → 未命中：注入 key/sig → 高德 /v3/weather/weatherInfo?extensions=all
+      → 校验 status → 写缓存 + amap_calls
+  → 返回 {lives, forecasts, cached, adcode, city}
+  → 前端 renderWeather()（全部字段 esc 转义；无实况时展示今日预报温度范围）
+  → 并行/续接 geocode 获取坐标 → AMap 标注 + InfoWindow
+  → 写 access_logs
+```
+
+### 7.2 地点联想
+
+输入框 debounce 280ms → `action=tips` → 游客高德限流 → `amap_proxy('tips')`（缓存 5 分钟）→ 前端最多渲染 12 条，点击后带 `adcode/location` 直接查询天气并定位地图。
+
+### 7.3 游客初始化
+
+`user.html` 计算/复用浏览器指纹 → `action=guest_init` → 后端校验指纹格式、吊销旧令牌、写入 `guest_tokens` → 返回 token/expires_in → 前端存 `localStorage` 并在后续请求头携带。令牌失效时（1002）前端自动重新初始化并重试一次。
+
+### 7.4 注册 / 登录
+
+- 注册：校验注册开关（关闭返回 1006）→ 用户名/密码格式 → 唯一性 → `password_hash()` 入库 → 自动 `session_login()`。
+- 登录：失败计数防护 → `password_verify()` → 校验 status → `session_regenerate_id(true)` → 更新最近登录信息。
+- 退出：销毁 Session 并删除 Cookie。
+
+### 7.5 关注城市
+
+仅登录用户可访问（`auth=user`）：`cities_list` / `cities_add`（上限 30、去重）/ `cities_del`（校验归属）/ `cities_reorder`（预留排序接口）。前端侧栏渲染，点击直接切换天气。
+
+### 7.6 后台看板
+
+`admin_overview` 实时聚合：
+- 今日请求量：`access_logs COUNT(ts >= 今日0点)`
+- 24 小时趋势：取今日 `ts` 后用 PHP `date('G')` 按小时聚合（避免 SQLite 时区差异）
+- 高德状态：`amap_calls` 统计真实调用/成功/失败/缓存命中/平均延迟
+- 剩余配额：`amap_daily_quota - 今日真实调用数`（缓存命中不消耗配额）
+- 最近调用：最新 15 条
+
+### 7.7 后台配置
+
+`admin_config_save` 按白名单校验字段类型、枚举、数值范围与 URL 格式 → `set_config_many()` 事务写入 → `config_all(true)` 刷新静态缓存 → 当前进程立即生效；由于配置在每个请求重新加载，后续所有请求即时生效，无需重启。
+
+### 7.8 日志与 GC
+
+每个请求（含失败）写 `access_logs`（耗时由 `$startTime` 计算）。`db_gc()` 按概率清理：过期 `amap_cache`、超期 `guest_tokens`、超过 `log_retain_days` 的 `access_logs` / `amap_calls`。
+
+---
+
+## 8. 部署与初始化
+
+### 8.1 环境要求
+
+| 项目 | 要求 |
+|------|------|
+| PHP | 7.2+，推荐 7.4 / 8.0 / 8.1 / 8.2（代码同样兼容 8.3） |
+| 必需扩展 | `pdo_sqlite`（SQLite 驱动） |
+| 推荐扩展 | `curl`（未启用时自动回退 `file_get_contents`，需 `allow_url_fopen=On`） |
+| 可选扩展 | `openssl`、`mbstring`（缺失时相关逻辑已自动降级） |
+| 目录权限 | 站点根目录**可写**（用于创建 `weather.db`、`-wal`、`-shm`） |
+| Web 服务器 | 宝塔默认 Nginx；Apache 可直接使用 `.htaccess` |
+
+### 8.2 首次初始化
+
+1. 上传全部文件到站点根目录；
+2. 访问 `api.php?action=ping`（或直接打开 `user.html`）；
+3. `db_init()` 自动执行 `schema.sql`，写入默认配置与管理员账号，生成 `weather.db`；
+4. 打开 `admin.html` 使用默认账号登录：
+   - 账号：`admin`
+   - 密码：`admin123`
+5. **立即修改密码**：后台「系统配置 → 管理员密码」。
+6. 在后台「系统配置 → 高德开放平台」填写：
+   - Web 服务 Key / 安全密钥（后端天气、联想、逆地理）
+   - JS API Key / 安全密钥（前端地图）
+7. 保存后立即生效，刷新用户端即可看到天气与地图。
+
+### 8.3 修改管理员密码（备用方式）
+
+若忘记密码，可在服务器执行 PHP 生成哈希，再更新数据库：
+
+```bash
+php -r 'echo password_hash("你的新密码", PASSWORD_DEFAULT), PHP_EOL;'
+```
+
+```sql
+UPDATE users SET password_hash = '上面输出的哈希' WHERE username = 'admin';
+```
+
+> 也可参考 `doc/API.md` 中的 `admin_change_password` 接口。
+
+### 8.4 宝塔面板（BT Panel）部署
+
+#### 8.4.1 建站与上传
+
+- 宝塔「网站 → 添加站点」，PHP 版本选择 **7.4 / 8.0 / 8.1 / 8.2**，站点根目录例如 `/www/wwwroot/weather.yousb.top`；
+- **运行目录保持 `/`**（本项目入口文件均在根目录，不要设置为 `public` 等子目录）；默认首页 `index.html` 已存在；
+- 将本项目全部文件上传到站点根目录；
+- **无需配置伪静态**：系统不使用 URL 重写，所有请求形如 `api.php?action=xxx`。
+
+#### 8.4.2 安装 / 确认 PHP 扩展
+
+- 宝塔「软件商店 → PHP-xx → 设置 → 安装扩展」确认已安装：
+  - 必需：`pdo_sqlite`
+  - 推荐：`sqlite3`、`curl`
+  - 可选：`mbstring`（缺失不影响运行，代码已做兼容）
+- 扩展缺失时，`api.php` 会直接返回：`PHP 未启用 pdo_sqlite 扩展，请在宝塔面板…安装后重试`。
+
+#### 8.4.3 `.user.ini` 与防跨站
+
+- 本项目 `.user.ini` 已删除旧主机遗留的 `open_basedir=/data/wwwweb/...`（该路径在宝塔上不存在，会导致全站 500），仅保留 `display_errors=Off`、`log_errors=On`；
+- 若在「网站 → 设置 → 网站目录」开启「防跨站攻击(open_basedir)」，宝塔会按当前站点路径写入 `.user.ini`；建议关闭后再开启一次，让面板重写为正确路径；
+- `.user.ini` 由 PHP-FPM 缓存（默认 `user_ini.cache_ttl=300` 秒），修改后等待约 5 分钟或在宝塔重启 PHP 生效；
+- 若将数据库放到站点目录之外，需把该目录加入 `open_basedir`（或关闭防跨站）。
+
+#### 8.4.4 目录权限
+
+宝塔 PHP-FPM 以 `www` 用户运行，上传后属主可能是 `root`，需要修正：
+
+```bash
+chown -R www:www /www/wwwroot/weather.yousb.top
+find /www/wwwroot/weather.yousb.top -type d -exec chmod 755 {} \;
+find /www/wwwroot/weather.yousb.top -type f -exec chmod 644 {} \;
+```
+
+`weather.db` 由 PHP 进程创建，无需预先建库；若已存在但只读，执行 `chown www:www weather.db*`。
+
+#### 8.4.5 Nginx 安全规则（重点）
+
+宝塔默认使用 **Nginx**，项目内的 `.htaccess` **不会生效**。请把以下规则加入站点配置文件（`/www/server/panel/vhost/nginx/你的站点.conf`），位置必须在 `include enable-php-*.conf;` 或 `location ~ [^/]\.php(/|$)` **之前**（Nginx 正则 location 按书写顺序匹配）：
+
+```nginx
+# 禁止下载 SQLite 数据库、建表脚本与文档
+location ~* \.(db|db-wal|db-shm|sqlite|sql|md|ini|log)$ {
+    return 404;
+}
+
+# 内部 PHP 模块禁止直接访问（api.php 与 amap-js-proxy.php 不受影响）
+location ~ ^/(config|helpers|db|auth|rate_limit|amap|api_auth|api_weather|api_cities|api_admin)\.php$ {
+    return 404;
+}
+```
+
+修改后执行 `nginx -t` 校验并重载（宝塔面板可直接点「重载配置」）。
+
+> 可选加固：把数据库移出 Web 根目录。例如创建 `/www/data/weather/`（属主 `www`），在 `config.php` 中修改 `DB_FILE`，或通过站点配置传入：
+> `fastcgi_param WEATHER_DB_FILE /www/data/weather/weather.db;`
+> （`config.php` 会优先读取 `$_SERVER['WEATHER_DB_FILE']` 或环境变量）。同时确保该目录在 `open_basedir` 范围内。
+
+#### 8.4.6 PHP 配置建议（宝塔「PHP 设置 → 配置修改」）
+
+```ini
+display_errors = Off
+log_errors = On
+error_log = /www/wwwlogs/php_error.log
+expose_php = Off
+date.timezone = Asia/Shanghai
+session.cookie_httponly = 1
+max_execution_time = 60
+memory_limit = 128M
+post_max_size = 8M
+upload_max_filesize = 8M
+allow_url_fopen = On
+```
+
+保存后重启 PHP。若启用了 opcache 且 `opcache.validate_timestamps=0`，部署新代码后需重启 PHP 才能生效。
+
+#### 8.4.7 防火墙 / 防篡改 / WAF
+
+- **网站防篡改**：会将站点目录设为只读，导致 SQLite 无法写入（提示“数据库目录不可写”）；请关闭或把站点目录加入白名单；
+- **宝塔 Nginx WAF**：可能对高频访问或含 SQL 关键字的搜索词返回 403/429，请在 WAF 日志中确认后放行；
+- 系统自身也会返回 429（业务码 1005），注意与 WAF 拦截区分；
+- 宝塔开启「强制 HTTPS」后，`config.php` 的 `is_https()` 会正常识别，Session Cookie 自动加 `Secure`。
+
+#### 8.4.8 备份（宝塔计划任务）
+
+```bash
+mkdir -p /www/backup/weather
+cp -a /www/wwwroot/weather.yousb.top/weather.db* /www/backup/weather/$(date +%F_%H%M)/
+```
+
+建议每天低峰期执行；也可在宝塔「文件」中离线打包 `weather.db`、`weather.db-wal`、`weather.db-shm` 三个文件。宝塔内置的 MySQL 备份不适用于 SQLite。
+
+#### 8.4.9 常见问题排查
+
+| 现象 | 排查方向 |
+|------|----------|
+| 全站 500 / 空白 | 多为 `.user.ini` 旧 `open_basedir`；确认按 8.4.3 处理；查看 `/www/server/php/{版本}/var/log/php-fpm.log` 与站点错误日志 |
+| `api.php` 返回 5000 且提示 pdo_sqlite | 在宝塔 PHP 设置中安装 `pdo_sqlite` 扩展 |
+| 提示“数据库目录不可写” | `chown -R www:www`、检查目录权限；关闭网站防篡改 |
+| 登录后立即掉线 | `session.save_path` 权限、`open_basedir` 未包含 `/tmp`、HTTPS/域名不一致 |
+| 天气接口 2001 / 2003 | 后台未填 Web 服务 Key；高德控制台未开通 Web 服务；启用数字签名但 secret 不匹配 |
+| 地图区域空白 | 后台未填 JS Key / 安全密钥；高德控制台未配置域名白名单；页面为 HTTPS |
+| 高德接口响应异常 2002 | 服务器无法访问 `restapi.amap.com`；安装 `curl` 或开启 `allow_url_fopen`；检查出站防火墙 |
+| 修改 `.user.ini` 不生效 | PHP-FPM 缓存 300 秒，重启 PHP 即可 |
+| 页面 403 且非系统返回 | 宝塔 WAF / 防火墙拦截，查 WAF 日志并加白 |
+
+### 8.5 Apache 场景
+
+- 保留根目录 `.htaccess` 即可自动生效（需 `AllowOverride All`）；
+- 数据库与内部模块保护规则已写入 `.htaccess`，无需额外配置。
+
+### 8.6 中国时区
+
+`config.php` 已设置 `Asia/Shanghai`。若服务器时区不同，PHP 生成的日志时间与令牌过期均使用该时区/时间戳，不影响逻辑。
+
+---
+
+## 9. 安全设计清单
+
+| 项目 | 实现 |
+|------|------|
+| 密钥保护 | 高德 Key 仅存 `system_config`；前端通过 `api.php` / `amap-js-proxy.php` 代理，源码无明文 |
+| 密码存储 | `password_hash(PASSWORD_DEFAULT)` / `password_verify()`，禁止明文 |
+| XSS 防护 | 前端所有动态文本经 `esc()` 转义（`& < > " '`），属性值同样转义；不使用 `innerHTML` 拼接未转义数据 |
+| SQL 注入 | 全部使用 PDO 预处理；分页 LIMIT/OFFSET 强制整型拼接 |
+| CSRF | Session Cookie `SameSite=Lax` + 全部写操作使用 JSON POST；跨域默认仅同源 |
+| 暴力破解 | 登录失败计数 + 限流 + 429 |
+| 越权 | 关注城市操作校验 `user_id` 归属；管理员接口强制 `role=admin`；不能封禁自己/最后管理员 |
+| 游客滥用 | 一次性令牌 + 指纹绑定 + IP/指纹双维度限流，高德接口更严格 |
+| 日志 | 记录 IP、指纹、UID、接口、状态、耗时；不记录密码与密钥 |
+| 错误信息 | 高德内部错误只写日志，前端返回通用信息 |
+| 目录访问 | `.htaccess` 禁止 `.db/.sql/.md/.ini` 与目录索引；建议 Nginx 同步配置 |
+
+---
+
+## 10. 运维建议
+
+- **备份**：定期备份 `weather.db`（含 WAL 时建议先执行 `PRAGMA wal_checkpoint(TRUNCATE);` 或直接停写后复制三个文件）。
+- **日志**：后台「访问日志」支持按 IP / 接口 / 用户 / 日期筛选分页；超期自动清理（默认 30 天）。
+- **配额监控**：后台看板展示今日真实调用、缓存命中、成功率与估算剩余配额。
+- **缓存调优**：天气 10 分钟、联想 5 分钟、地理编码 1 天；若高德配额紧张可适当调大 `cache_ttl_*`。
+- **限流调优**：先在后台观察日志量，再调整 `guest_rate_limit` / `user_rate_limit` / `rate_window`。
+- **反向代理**：若使用 CDN，开启 `trust_proxy` 并确保来源可信，否则 IP 黑名单会失效或误伤。
+
+---
+
+## 11. 已知限制与扩展方向
+
+1. **游客令牌**为会话级（有效期内可复用），不是严格"一次请求一令牌"；如需严格一次性，可在每次业务请求后 `revoke` 并返回新令牌（需前端同步更新）。
+2. **剩余配额**为本地估算值，高德 REST 接口不返回实时剩余配额。
+3. **普通用户改密码/找回密码**尚未实现（管理员改密已实现），可复用 `password_hash` 流程扩展。
+4. **SQLite 并发写**：已启用 WAL 与 5 秒 busy_timeout，适合中小流量；高并发场景建议迁移 MySQL。
+5. **`regeo` / `cities_reorder` / `ping`** 为预留接口，前端暂未使用；可在后续版本扩展定位按钮与拖拽排序。
+6. **JS API Key 运行时可见**：由高德 JS API 机制决定，建议配置域名白名单与安全密钥。
+
+---
+
+## 12. 变更记录
+
+| 版本 | 日期 | 说明 |
+|------|------|------|
+| v1.0.0 | 2026-11-19 | 初版：完成用户端、管理后台、统一 API、SQLite 配置化、双模式鉴权、限流、缓存、黑名单、看板与文档 |
+| v1.0.1 | 2026-11-19 | 宝塔面板（BT Panel）兼容：修复失效 `.user.ini` 的 `open_basedir`；Session Cookie 参数兼容 PHP 7.2+；新增 `pdo_sqlite` 检测与可读错误提示；WAL 初始化容错；支持 `WEATHER_DB_FILE` 将数据库外置；移除 `X-Powered-By`；补充宝塔 Nginx、PHP、权限、防篡改与备份部署文档 |
+| v1.0.2 | 2026-11-19 | 修复直接输入中文城市名时实时天气（lives）为空：天气查询先用地理编码解析 adcode 再请求高德，接口返回解析后的 `adcode` / `city`；前端在无实况时降级展示今日预报温度范围，并保存解析后的 adcode 供自动刷新与关注城市使用；侧栏增加关注城市空状态提示 |

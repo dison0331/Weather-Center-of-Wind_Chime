@@ -1,0 +1,952 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>天气中心 · 管理后台</title>
+<meta name="referrer" content="same-origin">
+<style>
+:root{
+  --bg:#f2f6fc;--panel:#fff;--text:#1b2735;--muted:#6b7c93;--line:#e1e9f4;
+  --accent:#2f6fed;--accent-2:#1d4fc4;--soft:#eef4ff;--danger:#e0533d;--ok:#1f9d61;
+  --shadow:0 10px 30px rgba(31,66,135,.08);
+}
+html[data-theme="dark"]{
+  --bg:#0d1320;--panel:#151d2c;--text:#e9eff9;--muted:#93a4bd;--line:#233049;
+  --accent:#5b8dff;--accent-2:#7aa4ff;--soft:#1b2639;--danger:#ff7a63;--ok:#45c48d;
+  --shadow:0 10px 30px rgba(0,0,0,.35);
+}
+*{box-sizing:border-box}
+[hidden]{display:none !important}
+body{margin:0;background:var(--bg);color:var(--text);font:14px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;transition:background .2s,color .2s}
+button,input,select{font:inherit;color:inherit}
+button{cursor:pointer}
+a{color:var(--accent);text-decoration:none}
+
+.login-wrap{min-height:100vh;display:grid;place-items:center;padding:24px;background:radial-gradient(circle at 20% 15%,rgba(91,141,255,.18),transparent 45%),radial-gradient(circle at 80% 85%,rgba(91,141,255,.12),transparent 40%)}
+.login-card{width:min(380px,100%);background:var(--panel);border-radius:18px;padding:30px 28px;box-shadow:0 30px 70px rgba(20,45,95,.16);border:1px solid var(--line)}
+.login-card h1{margin:0 0 4px;font-size:22px}
+.login-card .sub{margin:0 0 20px;font-size:12px;color:var(--muted)}
+.field{display:block;margin-bottom:13px}
+.field span{display:block;font-size:12px;color:var(--muted);margin-bottom:5px}
+.field input,.field select{width:100%;height:38px;border-radius:9px;border:1px solid var(--line);background:var(--bg);padding:0 11px;outline:none}
+.field input:focus,.field select:focus{border-color:var(--accent)}
+.pwd-wrap{position:relative}
+.pwd-wrap input{padding-right:52px}
+.pwd-toggle{position:absolute;right:6px;top:6px;height:26px;border:1px solid var(--line);background:var(--panel);border-radius:6px;font-size:11px;padding:0 8px;color:var(--muted)}
+.form-error{min-height:18px;font-size:12px;color:var(--danger);margin:2px 0 10px}
+.primary{width:100%;height:40px;border:none;border-radius:10px;background:linear-gradient(120deg,var(--accent),var(--accent-2));color:#fff;font-weight:600}
+.primary:disabled{opacity:.6;cursor:not-allowed}
+
+.app-header{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:14px;padding:12px 20px;background:linear-gradient(120deg,#1d2a44,#233a63);color:#fff;box-shadow:0 4px 18px rgba(10,25,55,.22)}
+.app-header .brand{font-weight:700;font-size:17px;letter-spacing:.5px}
+.app-header .brand small{font-weight:400;font-size:11px;opacity:.7;margin-left:6px}
+.app-header .spacer{margin-left:auto}
+.hbtn{height:32px;padding:0 13px;border-radius:9px;border:1px solid rgba(255,255,255,.32);background:rgba(255,255,255,.1);color:#fff;font-size:13px}
+.hbtn:hover{background:rgba(255,255,255,.2)}
+.hbtn.plain{border-color:transparent;background:transparent}
+.app-header .who{font-size:13px;opacity:.9}
+
+.admin-layout{display:grid;grid-template-columns:190px minmax(0,1fr);min-height:calc(100vh - 56px)}
+.sidenav{padding:18px 12px;border-right:1px solid var(--line);background:var(--panel)}
+.nav-item{display:flex;align-items:center;gap:9px;width:100%;padding:10px 12px;border:none;border-radius:9px;background:transparent;color:var(--muted);font-size:13.5px;text-align:left;margin-bottom:4px}
+.nav-item:hover{background:var(--soft);color:var(--text)}
+.nav-item.active{background:var(--soft);color:var(--accent);font-weight:600}
+.main{padding:20px 22px 60px;min-width:0}
+.view-head{display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap}
+.view-head h2{margin:0;font-size:19px}
+.view-head .desc{color:var(--muted);font-size:12px}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);padding:16px}
+.panel + .panel{margin-top:16px}
+.panel-title{display:flex;align-items:center;gap:10px;margin:0 0 12px;font-size:14px}
+.panel-title .tag{font-size:11px;color:var(--muted);font-weight:400}
+
+.stat-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:16px}
+.stat{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:15px 16px;box-shadow:var(--shadow)}
+.stat .label{font-size:12px;color:var(--muted)}
+.stat .value{font-size:26px;font-weight:700;margin-top:6px;letter-spacing:-.5px}
+.stat .value small{font-size:12px;font-weight:400;color:var(--muted);margin-left:4px}
+.stat .foot{font-size:11px;color:var(--muted);margin-top:5px}
+.stat.accent .value{color:var(--accent)}
+
+.two-col{display:grid;grid-template-columns:minmax(0,1.55fr) minmax(0,1fr);gap:16px}
+.chart-box{position:relative;height:214px}
+canvas{display:block}
+.amap-kpis{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
+.kpi{border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:var(--bg)}
+.kpi .k{font-size:11px;color:var(--muted)}
+.kpi .v{font-size:18px;font-weight:700;margin-top:3px}
+.bar{height:6px;border-radius:99px;background:var(--line);margin-top:8px;overflow:hidden}
+.bar i{display:block;height:100%;background:linear-gradient(90deg,var(--accent),var(--accent-2))}
+
+table{width:100%;border-collapse:collapse;font-size:12.5px}
+th,td{padding:9px 8px;text-align:left;border-bottom:1px solid var(--line);vertical-align:top}
+th{color:var(--muted);font-weight:600;font-size:11.5px;white-space:nowrap;background:var(--soft)}
+tbody tr:hover{background:var(--soft)}
+.table-wrap{overflow:auto;border:1px solid var(--line);border-radius:10px}
+.table-wrap table th:first-child,.table-wrap table td:first-child{padding-left:12px}
+.table-wrap table th:last-child,.table-wrap table td:last-child{padding-right:12px}
+.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:11.5px}
+.badge{display:inline-block;padding:1px 8px;border-radius:99px;font-size:11px;border:1px solid var(--line);color:var(--muted);background:var(--bg)}
+.badge.ok{color:var(--ok);border-color:rgba(31,157,97,.4);background:rgba(31,157,97,.08)}
+.badge.bad{color:var(--danger);border-color:rgba(224,83,61,.4);background:rgba(224,83,61,.08)}
+.badge.admin{color:var(--accent);border-color:rgba(47,111,237,.35);background:var(--soft)}
+
+.filters{display:flex;flex-wrap:wrap;gap:9px;margin-bottom:12px;align-items:flex-end}
+.filters label{display:flex;flex-direction:column;gap:4px;font-size:11px;color:var(--muted)}
+.filters input,.filters select{height:33px;border-radius:8px;border:1px solid var(--line);background:var(--bg);padding:0 9px;min-width:120px;outline:none}
+.filters input:focus,.filters select:focus{border-color:var(--accent)}
+.btn-s{height:33px;padding:0 13px;border-radius:8px;border:1px solid var(--line);background:var(--panel);font-size:12.5px}
+.btn-s:hover{border-color:var(--accent);color:var(--accent)}
+.btn-s.primary-s{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn-s.danger-s{color:var(--danger);border-color:rgba(224,83,61,.35);background:transparent}
+.btn-s.danger-s:hover{background:rgba(224,83,61,.08)}
+.pager{display:flex;align-items:center;gap:9px;margin-top:12px;font-size:12px;color:var(--muted)}
+.pager .spacer{flex:1}
+
+.cfg-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:13px 18px}
+.cfg-grid .full{grid-column:1 / -1}
+.cfg-section{margin:18px 0 10px;padding-bottom:6px;border-bottom:1px dashed var(--line);font-size:13px;font-weight:700;color:var(--accent)}
+.cfg-grid .field{margin:0}
+.cfg-note{font-size:11.5px;color:var(--muted);margin-top:4px}
+.switch{display:flex;align-items:center;gap:8px;font-size:13px;padding-top:20px}
+.switch input{width:38px;height:20px;accent-color:var(--accent)}
+.actions-row{display:flex;gap:10px;margin-top:18px;align-items:center}
+.actions-row .hint{font-size:11.5px;color:var(--muted)}
+
+.toast{position:fixed;left:50%;bottom:32px;transform:translate(-50%,20px);background:#1b2735;color:#fff;padding:10px 18px;border-radius:999px;font-size:13px;opacity:0;pointer-events:none;transition:.22s;z-index:90;max-width:80vw;text-align:center}
+.toast.show{opacity:1;transform:translate(-50%,0)}
+html[data-theme="dark"] .toast{background:#2a3a56}
+.empty-row{text-align:center;color:var(--muted);padding:22px 0}
+
+@media (max-width:1000px){
+  .stat-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .two-col{grid-template-columns:minmax(0,1fr)}
+}
+@media (max-width:760px){
+  .admin-layout{grid-template-columns:minmax(0,1fr)}
+  .sidenav{display:flex;overflow:auto;border-right:none;border-bottom:1px solid var(--line);padding:10px}
+  .nav-item{white-space:nowrap;margin:0 4px 0 0}
+  .cfg-grid{grid-template-columns:minmax(0,1fr)}
+  .main{padding:14px}
+}
+</style>
+</head>
+<body>
+
+<div id="loginView" class="login-wrap">
+  <form id="loginForm" class="login-card" novalidate>
+    <h1>管理后台</h1>
+    <p class="sub">高德天气系统 · 仅限管理员账号登录</p>
+    <label class="field"><span>管理员账号</span><input id="loginUser" type="text" autocomplete="username" maxlength="20" placeholder="请输入管理员账号"></label>
+    <label class="field"><span>密码</span>
+      <div class="pwd-wrap">
+        <input id="loginPass" type="password" autocomplete="current-password" maxlength="72" placeholder="请输入密码">
+        <button type="button" class="pwd-toggle" data-toggle="loginPass">显示</button>
+      </div>
+    </label>
+    <div id="loginError" class="form-error"></div>
+    <button id="loginSubmit" class="primary" type="submit">登录后台</button>
+  </form>
+</div>
+
+<div id="appView" hidden>
+  <header class="app-header">
+    <div class="brand">天气中心<small>管理后台</small></div>
+    <div class="spacer"></div>
+    <span id="adminWho" class="who"></span>
+    <a class="hbtn plain" href="user.html" target="_blank" rel="noopener">用户端</a>
+    <button id="themeBtn" class="hbtn plain" title="切换主题">🌙</button>
+    <button id="logoutBtn" class="hbtn">退出</button>
+  </header>
+
+  <div class="admin-layout">
+    <nav class="sidenav">
+      <button class="nav-item active" data-view="overview">📊 数据看板</button>
+      <button class="nav-item" data-view="logs">📋 访问日志</button>
+      <button class="nav-item" data-view="users">👤 账号管理</button>
+      <button class="nav-item" data-view="config">⚙️ 系统配置</button>
+      <button class="nav-item" data-view="blacklist">🚫 封禁管理</button>
+    </nav>
+
+    <main class="main">
+      <!-- 数据看板 -->
+      <section id="view-overview">
+        <div class="view-head">
+          <h2>数据看板</h2>
+          <span class="desc">当日请求趋势与高德接口运行状态</span>
+          <button id="refreshOverview" class="btn-s" style="margin-left:auto">刷新数据</button>
+        </div>
+        <div class="stat-grid">
+          <div class="stat accent"><div class="label">今日请求量</div><div class="value" id="ovRequests">--</div><div class="foot">含全部 API 调用</div></div>
+          <div class="stat"><div class="label">注册用户</div><div class="value" id="ovUsers">--</div><div class="foot" id="ovUsersFoot">封禁 0 人</div></div>
+          <div class="stat"><div class="label">高德调用成功率</div><div class="value" id="ovRate">--<small>%</small></div><div class="foot" id="ovRateFoot">今日真实调用 0 次</div></div>
+          <div class="stat"><div class="label">剩余配额（估算）</div><div class="value" id="ovQuota">--</div><div class="foot" id="ovQuotaFoot">每日配额 --</div></div>
+        </div>
+
+        <div class="two-col">
+          <div class="panel">
+            <h3 class="panel-title">今日请求趋势 <span class="tag">按小时统计</span></h3>
+            <div class="chart-box"><canvas id="trendCanvas"></canvas></div>
+          </div>
+          <div class="panel">
+            <h3 class="panel-title">高德接口状态</h3>
+            <div class="amap-kpis">
+              <div class="kpi"><div class="k">平均延迟</div><div class="v" id="ovAvg">-- ms</div></div>
+              <div class="kpi"><div class="k">缓存命中</div><div class="v" id="ovCache">--</div></div>
+            </div>
+            <div class="kpi"><div class="k">配额使用</div><div class="v" id="ovQuotaText">--</div>
+              <div class="bar"><i id="ovQuotaBar" style="width:0"></i></div>
+            </div>
+            <h3 class="panel-title" style="margin-top:14px">最近调用</h3>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>时间</th><th>接口</th><th>状态</th><th>耗时</th></tr></thead>
+                <tbody id="recentCalls"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 访问日志 -->
+      <section id="view-logs" hidden>
+        <div class="view-head"><h2>访问日志</h2><span class="desc">支持按时间、IP、接口、用户筛选</span></div>
+        <div class="panel">
+          <form id="logFilter" class="filters">
+            <label>IP<input name="ip" maxlength="45" placeholder="支持模糊匹配"></label>
+            <label>接口<input name="action" maxlength="40" placeholder="如 weather"></label>
+            <label>用户 ID<input name="uid" type="number" min="0" style="min-width:90px"></label>
+            <label>开始日期<input name="date_from" type="date"></label>
+            <label>结束日期<input name="date_to" type="date"></label>
+            <button class="btn-s primary-s" type="submit">查询</button>
+            <button class="btn-s" type="button" id="logReset">重置</button>
+          </form>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>时间</th><th>IP</th><th>身份</th><th>接口</th><th>状态</th><th>耗时</th><th>UA</th></tr></thead>
+              <tbody id="logBody"></tbody>
+            </table>
+          </div>
+          <div class="pager">
+            <span id="logTotal">共 0 条</span><span class="spacer"></span>
+            <button class="btn-s" id="logPrev" type="button">上一页</button>
+            <span id="logPage">1 / 1</span>
+            <button class="btn-s" id="logNext" type="button">下一页</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- 账号管理 -->
+      <section id="view-users" hidden>
+        <div class="view-head"><h2>账号管理</h2><span class="desc">封禁后该账号的请求会被统一拦截</span></div>
+        <div class="panel">
+          <form id="userFilter" class="filters">
+            <label>关键词<input name="keyword" maxlength="40" placeholder="用户名或最近 IP"></label>
+            <button class="btn-s primary-s" type="submit">搜索</button>
+            <button class="btn-s" type="button" id="userReset">重置</button>
+          </form>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>ID</th><th>用户名</th><th>角色</th><th>状态</th><th>关注城市</th><th>最近 IP</th><th>最近登录</th><th>注册时间</th><th>操作</th></tr></thead>
+              <tbody id="userBody"></tbody>
+            </table>
+          </div>
+          <div class="pager">
+            <span id="userTotal">共 0 人</span><span class="spacer"></span>
+            <button class="btn-s" id="userPrev" type="button">上一页</button>
+            <span id="userPage">1 / 1</span>
+            <button class="btn-s" id="userNext" type="button">下一页</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- 系统配置 -->
+      <section id="view-config" hidden>
+        <div class="view-head"><h2>系统配置</h2><span class="desc">配置写入数据库后即时生效</span></div>
+        <form id="configForm" class="panel">
+          <div class="cfg-section">高德开放平台</div>
+          <div class="cfg-grid">
+            <label class="field full"><span>Web 服务 Key（后端天气/联想/地理编码）</span>
+              <div class="pwd-wrap"><input data-cfg="amap_web_key" type="password" autocomplete="off"><button type="button" class="pwd-toggle" data-toggle="cfg-amap_web_key">显示</button></div>
+            </label>
+            <label class="field full"><span>Web 服务安全密钥</span>
+              <div class="pwd-wrap"><input data-cfg="amap_web_secret" type="password" autocomplete="off"><button type="button" class="pwd-toggle" data-toggle="cfg-amap_web_secret">显示</button></div>
+            </label>
+            <label class="field full"><span>JS API Key（前端地图，经后端代理加载）</span>
+              <div class="pwd-wrap"><input data-cfg="amap_js_key" type="password" autocomplete="off"><button type="button" class="pwd-toggle" data-toggle="cfg-amap_js_key">显示</button></div>
+            </label>
+            <label class="field full"><span>JS API 安全密钥</span>
+              <div class="pwd-wrap"><input data-cfg="amap_js_security_code" type="password" autocomplete="off"><button type="button" class="pwd-toggle" data-toggle="cfg-amap_js_security_code">显示</button></div>
+            </label>
+            <label class="field"><span>每日调用配额（0 表示不限制）</span><input data-cfg="amap_daily_quota" type="number" min="0"></label>
+          </div>
+
+          <div class="cfg-section">限流与配额</div>
+          <div class="cfg-grid">
+            <label class="field"><span>游客每分钟请求上限</span><input data-cfg="guest_rate_limit" type="number" min="0"></label>
+            <label class="field"><span>游客每分钟高德接口上限</span><input data-cfg="guest_amap_rate_limit" type="number" min="0"></label>
+            <label class="field"><span>登录账号每分钟配额</span><input data-cfg="user_rate_limit" type="number" min="0"></label>
+            <label class="field"><span>限流统计窗口（秒）</span><input data-cfg="rate_window" type="number" min="10"></label>
+            <label class="field"><span>登录失败上限（次）</span><input data-cfg="login_fail_limit" type="number" min="0"></label>
+            <label class="field"><span>登录失败统计窗口（秒）</span><input data-cfg="login_fail_window" type="number" min="60"></label>
+            <label class="field"><span>游客令牌有效期（秒）</span><input data-cfg="guest_token_ttl" type="number" min="60"></label>
+          </div>
+
+          <div class="cfg-section">缓存与数据清理</div>
+          <div class="cfg-grid">
+            <label class="field"><span>天气缓存（秒，0 关闭）</span><input data-cfg="cache_ttl_weather" type="number" min="0"></label>
+            <label class="field"><span>联想缓存（秒）</span><input data-cfg="cache_ttl_tips" type="number" min="0"></label>
+            <label class="field"><span>逆地理缓存（秒）</span><input data-cfg="cache_ttl_regeo" type="number" min="0"></label>
+            <label class="field"><span>地理编码缓存（秒）</span><input data-cfg="cache_ttl_geocode" type="number" min="0"></label>
+            <label class="field"><span>日志保留天数</span><input data-cfg="log_retain_days" type="number" min="1"></label>
+          </div>
+
+          <div class="cfg-section">站点与功能开关</div>
+          <div class="cfg-grid">
+            <label class="field"><span>站点名称</span><input data-cfg="site_name" type="text" maxlength="60"></label>
+            <label class="field"><span>默认城市</span><input data-cfg="default_city" type="text" maxlength="50"></label>
+            <label class="field full"><span>跨域白名单（留空仅允许同源，多个用英文逗号分隔）</span><input data-cfg="allow_origin" type="text" maxlength="300" placeholder="https://weather.example.com"></label>
+            <label class="field"><span>默认自动刷新间隔（秒）</span><input data-cfg="auto_refresh" type="number" min="30"></label>
+            <div class="switch"><input data-cfg="register_enabled" id="cfgRegister" type="checkbox"><span>开放用户注册</span></div>
+            <div class="switch"><input data-cfg="trust_proxy" id="cfgProxy" type="checkbox"><span>信任反向代理 X-Forwarded-For</span></div>
+          </div>
+
+          <div class="actions-row">
+            <button class="btn-s primary-s" type="submit" id="configSave" style="height:38px;padding:0 20px">保存配置</button>
+            <span class="hint" id="configUpdated">最后更新：--</span>
+          </div>
+        </form>
+        <div class="panel">
+          <h3 class="panel-title">管理员密码 <span class="tag">修改后立即生效，请妥善保管</span></h3>
+          <form id="pwdForm" class="filters">
+            <label>当前密码<input name="old_password" type="password" autocomplete="current-password" maxlength="72"></label>
+            <label>新密码<input name="new_password" type="password" autocomplete="new-password" maxlength="72" placeholder="至少 6 位"></label>
+            <label>确认新密码<input name="confirm_password" type="password" autocomplete="new-password" maxlength="72"></label>
+            <button class="btn-s primary-s" type="submit">修改密码</button>
+          </form>
+        </div>
+      </section>
+
+      <!-- 封禁管理 -->
+      <section id="view-blacklist" hidden>
+        <div class="view-head"><h2>封禁管理</h2><span class="desc">被封禁的 IP / 指纹在 api.php 统一拦截（错误码 1003）</span></div>
+        <div class="panel">
+          <form id="blacklistForm" class="filters">
+            <label>类型
+              <select name="type"><option value="ip">IP 地址</option><option value="fingerprint">浏览器指纹</option></select>
+            </label>
+            <label>值<input name="value" maxlength="80" placeholder="IP 或 16 位指纹" required></label>
+            <label>原因<input name="reason" maxlength="100" placeholder="可选"></label>
+            <button class="btn-s primary-s" type="submit">添加黑名单</button>
+          </form>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>ID</th><th>类型</th><th>值</th><th>原因</th><th>添加时间</th><th>操作</th></tr></thead>
+              <tbody id="blacklistBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+</div>
+
+<div id="toast" class="toast" role="status"></div>
+
+<script>
+(function () {
+  'use strict';
+
+  var state = {
+    fp: '',
+    me: null,
+    view: 'overview',
+    trend: [],
+    logs: { page: 1, size: 20, total: 0, pages: 1, filter: {} },
+    users: { page: 1, size: 20, total: 0, pages: 1, keyword: '' },
+    overviewTimer: null
+  };
+
+  var ESC_MAP = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+  function esc(value) {
+    return String(value == null ? '' : value).replace(/[&<>"']/g, function (ch) { return ESC_MAP[ch]; });
+  }
+  function $(id) { return document.getElementById(id); }
+
+  function toast(message) {
+    var el = $('toast');
+    el.textContent = String(message || '');
+    el.classList.add('show');
+    clearTimeout(toast._timer);
+    toast._timer = setTimeout(function () { el.classList.remove('show'); }, 2800);
+  }
+
+  function buildFingerprint() {
+    var parts = [navigator.userAgent || '', navigator.language || '', screen.width + 'x' + screen.height, String(new Date().getTimezoneOffset())];
+    try {
+      var c = document.createElement('canvas');
+      c.width = 180; c.height = 40;
+      var ctx = c.getContext('2d');
+      if (ctx) { ctx.font = '13px Arial'; ctx.fillStyle = '#345'; ctx.fillText('admin-fp', 3, 20); parts.push(c.toDataURL()); }
+    } catch (e) { }
+    var str = parts.join('::');
+    var h1 = 0x811c9dc5, h2 = 0x1000193;
+    for (var i = 0; i < str.length; i++) {
+      var ch = str.charCodeAt(i);
+      h1 ^= ch; h1 = Math.imul(h1, 0x01000193);
+      h2 = (Math.imul(h2, 31) + ch) >>> 0;
+    }
+    function hex(n) { return ('0000000' + (n >>> 0).toString(16)).slice(-8); }
+    return hex(h1) + hex(h2);
+  }
+
+  async function api(action, params, method) {
+    var headers = { 'X-Fingerprint': state.fp };
+    var url = 'api.php?action=' + encodeURIComponent(action);
+    var options = { method: method || 'POST', headers: headers, credentials: 'same-origin' };
+    if (options.method === 'GET') {
+      var qs = new URLSearchParams(params || {}).toString();
+      if (qs) url += '&' + qs;
+    } else {
+      headers['Content-Type'] = 'application/json';
+      options.body = JSON.stringify(params || {});
+    }
+    var response = await fetch(url, options);
+    var json;
+    try { json = await response.json(); } catch (e) { throw new Error('服务器响应异常'); }
+    if (!json || typeof json.code !== 'number') throw new Error('服务器响应格式错误');
+    if (json.code !== 0) {
+      var err = new Error(json.message || '请求失败');
+      err.code = json.code;
+      if (json.code === 1002 || json.code === 1004) showLogin(json.message);
+      throw err;
+    }
+    return json.data;
+  }
+
+  function applyTheme(theme) {
+    document.documentElement.setAttribute('data-theme', theme === 'dark' ? 'dark' : 'light');
+    $('themeBtn').textContent = theme === 'dark' ? '☀️' : '🌙';
+    localStorage.setItem('admin_theme', theme);
+    if (state.trend && state.trend.length) drawTrend();
+  }
+
+  $('themeBtn').addEventListener('click', function () {
+    applyTheme(document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
+  });
+
+  function showLogin(message) {
+    $('appView').hidden = true;
+    $('loginView').style.display = 'grid';
+    if (message) $('loginError').textContent = message;
+    if (state.overviewTimer) { clearInterval(state.overviewTimer); state.overviewTimer = null; }
+  }
+
+  function showApp() {
+    $('loginView').style.display = 'none';
+    $('appView').hidden = false;
+    $('adminWho').textContent = (state.me && state.me.user ? state.me.user.username : '') + '（管理员）';
+    switchView('overview');
+    if (!state.overviewTimer) {
+      state.overviewTimer = setInterval(function () {
+        if (state.view === 'overview' && !document.hidden) loadOverview();
+      }, 60000);
+    }
+  }
+
+  document.querySelectorAll('[data-toggle]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var input = $(btn.getAttribute('data-toggle'));
+      if (!input) return;
+      var isPwd = input.type === 'password';
+      input.type = isPwd ? 'text' : 'password';
+      btn.textContent = isPwd ? '隐藏' : '显示';
+    });
+  });
+
+  $('loginForm').addEventListener('submit', async function (event) {
+    event.preventDefault();
+    var username = $('loginUser').value.trim();
+    var password = $('loginPass').value;
+    $('loginError').textContent = '';
+    if (!username || !password) {
+      $('loginError').textContent = '请输入账号和密码';
+      return;
+    }
+    var submit = $('loginSubmit');
+    submit.disabled = true;
+    submit.textContent = '登录中…';
+    try {
+      await api('admin_login', { username: username, password: password, fingerprint: state.fp });
+      await refreshMe();
+      if (!state.me || !state.me.user || state.me.user.role !== 'admin') {
+        throw new Error('该账号不是管理员');
+      }
+      showApp();
+      toast('登录成功');
+    } catch (e) {
+      $('loginError').textContent = e.message || '登录失败';
+    } finally {
+      submit.disabled = false;
+      submit.textContent = '登录后台';
+    }
+  });
+
+  $('logoutBtn').addEventListener('click', async function () {
+    try { await api('logout', {}, 'POST'); } catch (e) { }
+    state.me = null;
+    $('loginUser').value = '';
+    $('loginPass').value = '';
+    showLogin();
+    toast('已退出登录');
+  });
+
+  async function refreshMe() {
+    try {
+      state.me = await api('me', {}, 'GET');
+    } catch (e) {
+      state.me = null;
+    }
+  }
+
+  // ---------- 视图切换 ----------
+  document.querySelectorAll('.nav-item').forEach(function (btn) {
+    btn.addEventListener('click', function () { switchView(btn.getAttribute('data-view')); });
+  });
+
+  function switchView(view) {
+    state.view = view;
+    document.querySelectorAll('.nav-item').forEach(function (btn) {
+      btn.classList.toggle('active', btn.getAttribute('data-view') === view);
+    });
+    ['overview', 'logs', 'users', 'config', 'blacklist'].forEach(function (name) {
+      $('view-' + name).hidden = name !== view;
+    });
+    if (view === 'overview') { loadOverview(); }
+    if (view === 'logs') { loadLogs(); }
+    if (view === 'users') { loadUsers(); }
+    if (view === 'config') { loadConfig(); }
+    if (view === 'blacklist') { loadBlacklist(); }
+  }
+
+  // ---------- 数据看板 ----------
+  async function loadOverview() {
+    try {
+      var data = await api('admin_overview', {}, 'POST');
+      $('ovRequests').textContent = data.requests_today;
+      $('ovUsers').textContent = data.users_total;
+      $('ovUsersFoot').textContent = '封禁 ' + data.users_banned + ' 人 · 游客令牌 ' + data.guest_tokens;
+      $('ovRate').innerHTML = esc(data.amap.success_rate) + '<small>%</small>';
+      $('ovRateFoot').textContent = '真实调用 ' + data.amap.success + '/' + data.amap.real_calls + ' 次';
+      $('ovAvg').textContent = data.amap.avg_ms + ' ms';
+      $('ovCache').textContent = data.amap.cache_hits + ' 次';
+      $('ovQuota').textContent = data.amap.quota_left >= 0 ? data.amap.quota_left : '不限';
+      $('ovQuotaFoot').textContent = '每日配额 ' + (data.amap.quota > 0 ? data.amap.quota : '不限');
+      var used = data.amap.quota > 0 ? data.amap.quota_used : data.amap.real_calls;
+      $('ovQuotaText').textContent = data.amap.quota_used + ' / ' + (data.amap.quota > 0 ? data.amap.quota : '∞');
+      var pct = data.amap.quota > 0 ? Math.min(100, data.amap.quota_used / data.amap.quota * 100) : Math.min(100, data.amap.real_calls / 100);
+      $('ovQuotaBar').style.width = pct.toFixed(1) + '%';
+
+      renderRecentCalls(data.recent_calls || []);
+      state.trend = data.trend || [];
+      drawTrend();
+    } catch (e) {
+      toast(e.message || '加载看板失败');
+    }
+  }
+
+  function renderRecentCalls(list) {
+    var body = $('recentCalls');
+    if (!list.length) {
+      body.innerHTML = '<tr><td colspan="4" class="empty-row">暂无调用记录</td></tr>';
+      return;
+    }
+    var html = '';
+    list.forEach(function (row) {
+      var ok = row.ok === 1;
+      var status = row.cached === 1 ? '<span class="badge">缓存</span>' : (ok ? '<span class="badge ok">成功</span>' : '<span class="badge bad">失败</span>');
+      html += '<tr><td class="mono">' + esc(row.time) + '</td><td>' + esc(row.service) + '</td><td>' + status + '</td><td class="mono">' + esc(row.elapsed_ms) + ' ms</td></tr>';
+    });
+    body.innerHTML = html;
+  }
+
+  function cssVar(name) {
+    return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || '#e1e9f4';
+  }
+
+  function drawTrend() {
+    var canvas = $('trendCanvas');
+    var box = canvas.parentElement.getBoundingClientRect();
+    var w = Math.max(280, box.width);
+    var h = 214;
+    var dpr = window.devicePixelRatio || 1;
+    canvas.width = Math.round(w * dpr);
+    canvas.height = Math.round(h * dpr);
+    canvas.style.width = w + 'px';
+    canvas.style.height = h + 'px';
+    var ctx = canvas.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, w, h);
+
+    var list = state.trend || [];
+    if (!list.length) {
+      ctx.fillStyle = cssVar('--muted');
+      ctx.font = '13px sans-serif';
+      ctx.fillText('暂无数据', w / 2 - 26, h / 2);
+      return;
+    }
+    var pad = { l: 40, r: 14, t: 16, b: 26 };
+    var max = 1;
+    list.forEach(function (p) { if (p.count > max) max = p.count; });
+    function X(i) { return pad.l + (w - pad.l - pad.r) * (i / (list.length - 1)); }
+    function Y(v) { return h - pad.b - (h - pad.t - pad.b) * (v / max); }
+
+    var lineColor = cssVar('--line');
+    var muted = cssVar('--muted');
+    var accent = cssVar('--accent');
+
+    ctx.strokeStyle = lineColor;
+    ctx.lineWidth = 1;
+    ctx.font = '11px sans-serif';
+    ctx.fillStyle = muted;
+    for (var g = 0; g <= 4; g++) {
+      var gy = pad.t + (h - pad.t - pad.b) * g / 4;
+      ctx.beginPath();
+      ctx.moveTo(pad.l, gy);
+      ctx.lineTo(w - pad.r, gy);
+      ctx.stroke();
+      var val = Math.round(max * (4 - g) / 4);
+      ctx.fillText(String(val), 6, gy + 4);
+    }
+
+    var grad = ctx.createLinearGradient(0, pad.t, 0, h - pad.b);
+    grad.addColorStop(0, 'rgba(91,141,255,.28)');
+    grad.addColorStop(1, 'rgba(91,141,255,.02)');
+    ctx.beginPath();
+    ctx.moveTo(X(0), Y(list[0].count));
+    for (var i = 1; i < list.length; i++) ctx.lineTo(X(i), Y(list[i].count));
+    ctx.lineTo(X(list.length - 1), h - pad.b);
+    ctx.lineTo(X(0), h - pad.b);
+    ctx.closePath();
+    ctx.fillStyle = grad;
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.moveTo(X(0), Y(list[0].count));
+    for (var j = 1; j < list.length; j++) ctx.lineTo(X(j), Y(list[j].count));
+    ctx.strokeStyle = accent;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    for (var k = 0; k < list.length; k += 3) {
+      ctx.fillStyle = muted;
+      ctx.fillText(String(list[k].hour).padStart(2, '0') + ':00', X(k) - 14, h - 8);
+    }
+    ctx.fillStyle = muted;
+    ctx.fillText('23:00', X(list.length - 1) - 18, h - 8);
+  }
+
+  window.addEventListener('resize', function () {
+    if (state.view === 'overview') drawTrend();
+  });
+
+  $('refreshOverview').addEventListener('click', loadOverview);
+
+  // ---------- 访问日志 ----------
+  var logForm = $('logFilter');
+  logForm.addEventListener('submit', function (event) {
+    event.preventDefault();
+    var data = new FormData(logForm);
+    state.logs.filter = {
+      ip: String(data.get('ip') || '').trim(),
+      action: String(data.get('action') || '').trim(),
+      uid: Number(data.get('uid') || 0),
+      date_from: String(data.get('date_from') || ''),
+      date_to: String(data.get('date_to') || '')
+    };
+    state.logs.page = 1;
+    loadLogs();
+  });
+  $('logReset').addEventListener('click', function () {
+    logForm.reset();
+    state.logs.filter = {};
+    state.logs.page = 1;
+    loadLogs();
+  });
+  $('logPrev').addEventListener('click', function () {
+    if (state.logs.page > 1) { state.logs.page--; loadLogs(); }
+  });
+  $('logNext').addEventListener('click', function () {
+    if (state.logs.page < state.logs.pages) { state.logs.page++; loadLogs(); }
+  });
+
+  async function loadLogs() {
+    var params = Object.assign({ page: state.logs.page, size: state.logs.size }, state.logs.filter);
+    try {
+      var data = await api('admin_logs', params, 'POST');
+      state.logs.total = data.total;
+      state.logs.pages = Math.max(1, data.pages);
+      state.logs.page = Math.min(data.page, state.logs.pages);
+      $('logTotal').textContent = '共 ' + data.total + ' 条';
+      $('logPage').textContent = state.logs.page + ' / ' + state.logs.pages;
+      $('logPrev').disabled = state.logs.page <= 1;
+      $('logNext').disabled = state.logs.page >= state.logs.pages;
+
+      var body = $('logBody');
+      if (!data.items.length) {
+        body.innerHTML = '<tr><td colspan="7" class="empty-row">暂无日志</td></tr>';
+        return;
+      }
+      var html = '';
+      data.items.forEach(function (row) {
+        var identity = row.user_id ? '<span class="badge admin">UID ' + esc(row.user_id) + '</span>'
+          : '<span class="mono">' + esc((row.fingerprint || '').slice(0, 12) || '匿名') + '</span>';
+        var statusBadge = (row.code === 0 && row.status === 200)
+          ? '<span class="badge ok">' + esc(row.status) + '</span>'
+          : '<span class="badge bad">' + esc(row.status) + ' / ' + esc(row.code) + '</span>';
+        html += '<tr>' +
+          '<td class="mono">' + esc(row.created_at) + '</td>' +
+          '<td class="mono">' + esc(row.ip) + '</td>' +
+          '<td>' + identity + '</td>' +
+          '<td class="mono">' + esc(row.action) + '</td>' +
+          '<td>' + statusBadge + '</td>' +
+          '<td class="mono">' + esc(row.elapsed_ms) + ' ms</td>' +
+          '<td class="mono" title="' + esc(row.ua) + '">' + esc((row.ua || '').slice(0, 36)) + '</td>' +
+        '</tr>';
+      });
+      body.innerHTML = html;
+    } catch (e) {
+      toast(e.message || '加载日志失败');
+    }
+  }
+
+  // ---------- 账号管理 ----------
+  $('userFilter').addEventListener('submit', function (event) {
+    event.preventDefault();
+    state.users.keyword = String(new FormData($('userFilter')).get('keyword') || '').trim();
+    state.users.page = 1;
+    loadUsers();
+  });
+  $('userReset').addEventListener('click', function () {
+    $('userFilter').reset();
+    state.users.keyword = '';
+    state.users.page = 1;
+    loadUsers();
+  });
+  $('userPrev').addEventListener('click', function () {
+    if (state.users.page > 1) { state.users.page--; loadUsers(); }
+  });
+  $('userNext').addEventListener('click', function () {
+    if (state.users.page < state.users.pages) { state.users.page++; loadUsers(); }
+  });
+
+  async function loadUsers() {
+    try {
+      var data = await api('admin_users', { page: state.users.page, size: state.users.size, keyword: state.users.keyword }, 'POST');
+      state.users.total = data.total;
+      state.users.pages = Math.max(1, data.pages);
+      state.users.page = Math.min(data.page, state.users.pages);
+      $('userTotal').textContent = '共 ' + data.total + ' 人';
+      $('userPage').textContent = state.users.page + ' / ' + state.users.pages;
+      $('userPrev').disabled = state.users.page <= 1;
+      $('userNext').disabled = state.users.page >= state.users.pages;
+
+      var body = $('userBody');
+      if (!data.items.length) {
+        body.innerHTML = '<tr><td colspan="9" class="empty-row">没有匹配的账号</td></tr>';
+        return;
+      }
+      var html = '';
+      data.items.forEach(function (row) {
+        var role = row.role === 'admin' ? '<span class="badge admin">管理员</span>' : '<span class="badge">用户</span>';
+        var status = row.status === 1 ? '<span class="badge ok">正常</span>' : '<span class="badge bad">已封禁</span>';
+        var action = row.status === 1
+          ? '<button class="btn-s danger-s" data-uid="' + esc(row.id) + '" data-status="0" data-name="' + esc(row.username) + '">封禁</button>'
+          : '<button class="btn-s" data-uid="' + esc(row.id) + '" data-status="1" data-name="' + esc(row.username) + '">解封</button>';
+        html += '<tr>' +
+          '<td class="mono">' + esc(row.id) + '</td>' +
+          '<td>' + esc(row.username) + '</td>' +
+          '<td>' + role + '</td>' +
+          '<td>' + status + '</td>' +
+          '<td class="mono">' + esc(row.city_count) + '</td>' +
+          '<td class="mono">' + esc(row.last_ip || '-') + '</td>' +
+          '<td class="mono">' + esc(row.last_login_at || '-') + '</td>' +
+          '<td class="mono">' + esc(row.created_at) + '</td>' +
+          '<td>' + action + '</td>' +
+        '</tr>';
+      });
+      body.innerHTML = html;
+    } catch (e) {
+      toast(e.message || '加载账号失败');
+    }
+  }
+
+  $('userBody').addEventListener('click', async function (event) {
+    var btn = event.target.closest('[data-uid]');
+    if (!btn) return;
+    var uid = Number(btn.getAttribute('data-uid'));
+    var status = Number(btn.getAttribute('data-status'));
+    var name = btn.getAttribute('data-name');
+    if (status === 0 && !window.confirm('确认封禁账号「' + name + '」？封禁后该账号将无法继续请求接口。')) return;
+    btn.disabled = true;
+    try {
+      await api('admin_user_status', { id: uid, status: status }, 'POST');
+      toast(status === 0 ? '已封禁 ' + name : '已解封 ' + name);
+      loadUsers();
+    } catch (e) {
+      toast(e.message || '操作失败');
+      btn.disabled = false;
+    }
+  });
+
+  // ---------- 系统配置 ----------
+  function fillConfig(cfg) {
+    document.querySelectorAll('[data-cfg]').forEach(function (el) {
+      var key = el.getAttribute('data-cfg');
+      if (!(key in cfg)) return;
+      if (el.type === 'checkbox') {
+        el.checked = String(cfg[key]) === '1';
+      } else {
+        el.value = cfg[key] == null ? '' : cfg[key];
+      }
+    });
+    $('configUpdated').textContent = '最后更新：' + (cfg.updated_at || '--');
+  }
+
+  async function loadConfig() {
+    try {
+      var data = await api('admin_config_get', {}, 'POST');
+      fillConfig(data.config || {});
+    } catch (e) {
+      toast(e.message || '加载配置失败');
+    }
+  }
+
+  $('configForm').addEventListener('submit', async function (event) {
+    event.preventDefault();
+    var cfg = {};
+    document.querySelectorAll('[data-cfg]').forEach(function (el) {
+      cfg[el.getAttribute('data-cfg')] = el.type === 'checkbox' ? (el.checked ? '1' : '0') : String(el.value).trim();
+    });
+    var saveBtn = $('configSave');
+    saveBtn.disabled = true;
+    saveBtn.textContent = '保存中…';
+    try {
+      var data = await api('admin_config_save', { config: cfg }, 'POST');
+      fillConfig(data.config || {});
+      toast('配置已保存并即时生效');
+      loadOverview();
+    } catch (e) {
+      toast(e.message || '保存失败');
+    } finally {
+      saveBtn.disabled = false;
+      saveBtn.textContent = '保存配置';
+    }
+  });
+
+  // ---------- 管理员密码 ----------
+  $('pwdForm').addEventListener('submit', async function (event) {
+    event.preventDefault();
+    var pwdData = new FormData($('pwdForm'));
+    var oldPwd = String(pwdData.get('old_password') || '');
+    var newPwd = String(pwdData.get('new_password') || '');
+    var confirmPwd = String(pwdData.get('confirm_password') || '');
+    if (!oldPwd || !newPwd) { toast('请填写当前密码和新密码'); return; }
+    if (newPwd.length < 6) { toast('新密码至少 6 位'); return; }
+    if (newPwd !== confirmPwd) { toast('两次输入的新密码不一致'); return; }
+    try {
+      await api('admin_change_password', { old_password: oldPwd, new_password: newPwd }, 'POST');
+      $('pwdForm').reset();
+      toast('密码已修改');
+    } catch (e) {
+      toast(e.message || '修改失败');
+    }
+  });
+
+  // ---------- 封禁管理 ----------
+  $('blacklistForm').addEventListener('submit', async function (event) {
+    event.preventDefault();
+    var data = new FormData($('blacklistForm'));
+    var payload = {
+      type: String(data.get('type') || 'ip'),
+      value: String(data.get('value') || '').trim(),
+      reason: String(data.get('reason') || '').trim()
+    };
+    if (!payload.value) { toast('请填写封禁目标'); return; }
+    try {
+      await api('admin_blacklist_add', payload, 'POST');
+      $('blacklistForm').reset();
+      toast('已加入黑名单');
+      loadBlacklist();
+    } catch (e) {
+      toast(e.message || '添加失败');
+    }
+  });
+
+  async function loadBlacklist() {
+    try {
+      var data = await api('admin_blacklist_list', {}, 'POST');
+      var body = $('blacklistBody');
+      if (!data.items.length) {
+        body.innerHTML = '<tr><td colspan="6" class="empty-row">黑名单为空</td></tr>';
+        return;
+      }
+      var html = '';
+      data.items.forEach(function (row) {
+        html += '<tr>' +
+          '<td class="mono">' + esc(row.id) + '</td>' +
+          '<td>' + (row.type === 'ip' ? '<span class="badge">IP</span>' : '<span class="badge admin">指纹</span>') + '</td>' +
+          '<td class="mono">' + esc(row.value) + '</td>' +
+          '<td>' + esc(row.reason || '-') + '</td>' +
+          '<td class="mono">' + esc(row.created_at) + '</td>' +
+          '<td><button class="btn-s danger-s" data-bl="' + esc(row.id) + '">移除</button></td>' +
+        '</tr>';
+      });
+      body.innerHTML = html;
+    } catch (e) {
+      toast(e.message || '加载黑名单失败');
+    }
+  }
+
+  $('blacklistBody').addEventListener('click', async function (event) {
+    var btn = event.target.closest('[data-bl]');
+    if (!btn) return;
+    var id = Number(btn.getAttribute('data-bl'));
+    if (!window.confirm('确认将该记录移出黑名单？')) return;
+    try {
+      await api('admin_blacklist_delete', { id: id }, 'POST');
+      toast('已移除');
+      loadBlacklist();
+    } catch (e) {
+      toast(e.message || '操作失败');
+    }
+  });
+
+  // ---------- 启动 ----------
+  async function boot() {
+    var savedFp = localStorage.getItem('admin_fp');
+    state.fp = savedFp && /^[A-Za-z0-9_-]{8,80}$/.test(savedFp) ? savedFp : buildFingerprint();
+    localStorage.setItem('admin_fp', state.fp);
+
+    var theme = localStorage.getItem('admin_theme');
+    if (!theme) theme = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    applyTheme(theme);
+
+    await refreshMe();
+    if (state.me && state.me.type === 'user' && state.me.user && state.me.user.role === 'admin') {
+      showApp();
+    } else {
+      showLogin(state.me && state.me.type === 'user' ? '当前账号不是管理员，请使用管理员账号登录' : '');
+    }
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', boot);
+  } else {
+    boot();
+  }
+})();
+</script>
+</body>
+</html>
