@@ -1,7 +1,8 @@
 <?php
 /**
- * api.php —— 全部前端请求的统一入口
+ * api.php —— 全部前端请求的统一入口（保留在站点根目录）
  * 路由格式：api.php?action=xxx
+ * 后端模块统一位于 api/ 目录，通过文件系统加载；Web 直接访问 api/ 由 Nginx 规则或 api/.htaccess 拒绝。
  * 处理链：建库 → CORS → Session → 身份识别 → 黑名单 → 鉴权 → 限流 → 业务处理 → 日志 → 统一响应
  *
  * 宝塔兼容：
@@ -11,12 +12,24 @@
  */
 define('IN_PROJECT', true);
 
-require_once __DIR__ . '/config.php';
-require_once __DIR__ . '/helpers.php';
-require_once __DIR__ . '/db.php';
-require_once __DIR__ . '/auth.php';
-require_once __DIR__ . '/rate_limit.php';
-require_once __DIR__ . '/amap.php';
+if (!is_file(__DIR__ . '/api/config.php')) {
+    header('Content-Type: application/json; charset=utf-8');
+    header('X-Content-Type-Options: nosniff');
+    http_response_code(500);
+    echo json_encode([
+        'code'    => 5000,
+        'message' => '后端模块目录 api/ 缺失，请完整上传项目文件',
+        'data'    => null,
+    ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    exit;
+}
+
+require_once __DIR__ . '/api/config.php';
+require_once __DIR__ . '/api/helpers.php';
+require_once __DIR__ . '/api/db.php';
+require_once __DIR__ . '/api/auth.php';
+require_once __DIR__ . '/api/rate_limit.php';
+require_once __DIR__ . '/api/amap.php';
 
 ini_set('display_errors', '0');
 error_reporting(E_ALL);
@@ -73,10 +86,10 @@ if (session_status() !== PHP_SESSION_ACTIVE) {
 }
 
 $routes = array_merge(
-    require APP_ROOT . '/api_auth.php',
-    require APP_ROOT . '/api_weather.php',
-    require APP_ROOT . '/api_cities.php',
-    require APP_ROOT . '/api_admin.php'
+    require API_DIR . '/api_auth.php',
+    require API_DIR . '/api_weather.php',
+    require API_DIR . '/api_cities.php',
+    require API_DIR . '/api_admin.php'
 );
 
 $action = (string) param('action', '');

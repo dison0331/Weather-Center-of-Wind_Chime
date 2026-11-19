@@ -1,0 +1,10 @@
+# 后端模块目录：禁止通过 Web 直接访问
+# 根目录入口 api.php / amap-js-proxy.php 通过文件系统 require 这些模块，不受影响。
+
+<IfModule mod_authz_core.c>
+    Require all denied
+</IfModule>
+<IfModule !mod_authz_core.c>
+    Order allow,deny
+    Deny from all
+</IfModule>

@@ -1,6 +1,6 @@
 # 天气中心 · 系统设计与交接文档
 
-> 版本：v1.0.2 ｜ 技术栈：原生 HTML/CSS/JS + PHP 7.2+（推荐 7.4/8.x）+ SQLite ｜ 数据源：高德开放平台
+> 版本：v1.0.3 ｜ 技术栈：原生 HTML/CSS/JS + PHP 7.2+（推荐 7.4/8.x）+ SQLite ｜ 数据源：高德开放平台
 >
 > 本文档面向后续开发者与接手人员，涵盖目录结构、模块职责、数据库设计、鉴权限流、调用关系、数据流向、部署与安全注意事项。
 > 部署操作手册见同目录 [DEPLOY.md](DEPLOY.md)；接口明细见 [API.md](API.md)。
@@ -23,7 +23,7 @@
 
 ## 2. 目录结构
 
-> 代码文件全部位于项目根目录（部署时即站点根目录），文档统一归档在 `doc/`。根目录速查见 [../mulu.md](../mulu.md)。
+> 入口页面与 `api.php` 位于项目根目录；后端模块统一在 `api/`；文档归档在 `doc/`。根目录速查见 [../mulu.md](../mulu.md)。
 
 ```
 站点根目录/
@@ -32,26 +32,25 @@
 │  ├─ user.html             用户端单页应用
 │  ├─ admin.html            管理后台单页应用
 │  ├─ 404.html              静态 404 页面
-│  ├─ api.php               统一入口：CORS → Session → 身份识别 → 黑名单 → 鉴权 → 限流 → 路由 → 日志 → 统一 JSON
+│  ├─ api.php               统一入口：CORS → Session → 身份识别 → 黑名单 → 鉴权 → 限流 → 路由 → 日志 → 统一 JSON（保留在根目录）
 │  └─ amap-js-proxy.php     JS API 安全配置输出 + SDK 动态加载器（密钥运行时注入）
 │
-├─ API 路由模块（仅被 api.php 引入，禁止直接访问）
-│  ├─ api_auth.php          公共身份接口（初始化、注册、登录、登出、me、ping）
-│  ├─ api_weather.php       天气 / 联想 / 逆地理 / 地理编码（全部走高德代理）
-│  ├─ api_cities.php        关注城市增删改查
-│  └─ api_admin.php         管理后台全部接口
-│
-├─ 公共与中间件（仅被后端引入，禁止直接访问）
-│  ├─ config.php            仅存放路径常量与时区（无任何密钥）
+├─ api/                     后端模块（禁止 Web 直接访问）
+│  ├─ config.php            路径常量与时区（APP_ROOT 项目根目录 / API_DIR 模块目录，无任何密钥）
 │  ├─ helpers.php           统一响应、参数读取、IP/指纹、CORS、HTTP 客户端、日志写入
 │  ├─ db.php                SQLite 连接、自动建表、配置读写、GC
 │  ├─ auth.php              身份识别、黑名单校验、登录/登出封装、登录失败防护
 │  ├─ rate_limit.php        分层限流中间件（游客 IP+指纹 / 用户账号配额）
-│  └─ amap.php              高德 REST 代理：签名、缓存、调用统计、JS 配置读取
+│  ├─ amap.php              高德 REST 代理：签名、缓存、调用统计、JS 配置读取
+│  ├─ api_auth.php          公共身份接口（初始化、注册、登录、登出、me、ping）
+│  ├─ api_weather.php       天气 / 联想 / 逆地理 / 地理编码（全部走高德代理）
+│  ├─ api_cities.php        关注城市增删改查
+│  ├─ api_admin.php         管理后台全部接口
+│  └─ .htaccess             Apache 下拒绝 Web 直接访问 api/ 目录
 │
 ├─ 数据与部署配置
 │  ├─ schema.sql            完整建表 SQL（SQLite 方言，首次访问自动执行）
-│  ├─ .htaccess             Apache 安全策略（宝塔 Nginx 不生效）
+│  ├─ .htaccess             Apache 根目录安全策略（宝塔 Nginx 不生效，含 404 页面）
 │  └─ .user.ini             宝塔/PHP-FPM 用户级配置（已移除旧主机的失效 open_basedir）
 │
 ├─ 运行时自动生成（不要上传）
@@ -71,11 +70,12 @@
 
 ### 2.1 结构约定
 
-1. 所有 PHP / HTML / SQL 代码直接放在站点根目录，不新建代码子目录；
-2. 新增后端 PHP 模块后，必须同步加入宝塔 Nginx 的内部模块拒绝访问规则（见 8.4.5）；
+1. 入口页面与 `api.php`、`amap-js-proxy.php` 留在站点根目录；后端实现模块统一放 `api/`，不新增其他代码目录；
+2. `api/` 目录整体禁止 Web 访问（Nginx `location ^~ /api/` 或 Apache `api/.htaccess`），新增后端模块直接放入 `api/` 即可；
 3. 新增文档统一放 `doc/`，并在同一次改动中同步 `doc/README.md` 与根目录 `mulu.md` 的索引；
-4. 系统配置只存数据库 `system_config` 表，不写回 `config.php`；
-5. `weather.db*` 属于运行时数据，不纳入代码交付，首次访问 `api.php?action=ping` 时自动生成。
+4. 系统配置只存数据库 `system_config` 表，不写回 `api/config.php`；
+5. `api/config.php` 中 `APP_ROOT` 指向项目根目录、`API_DIR` 指向 `api/`；`schema.sql` 与 `weather.db` 位于根目录；
+6. `weather.db*` 属于运行时数据，不纳入代码交付，首次访问 `api.php?action=ping` 时自动生成。
 
 ### 2.2 访问控制
 
@@ -83,16 +83,17 @@
 |------|----------|------|
 | `index.html` / `user.html` / `admin.html` / `404.html` | 允许 | 静态页面 |
 | `api.php` / `amap-js-proxy.php` | 允许 | 唯一后端对外入口 |
-| 其余 10 个 PHP 模块 | 拒绝 | `.htaccess`；宝塔需 Nginx 规则 |
-| `schema.sql` / `weather.db*` / `.user.ini` | 拒绝 | `.htaccess`；宝塔需 Nginx 规则 |
-| `mulu.md` / `doc/*.md` | 拒绝 | `.htaccess`；宝塔需 Nginx 规则 |
+| `/api/` 整个目录 | 拒绝 | `api/.htaccess`；宝塔需 Nginx 规则 |
+| `schema.sql` / `weather.db*` / `.user.ini` / `.htaccess` | 拒绝 | 根 `.htaccess`；宝塔需 Nginx 规则 |
+| `mulu.md` / `doc/*.md` | 拒绝 | 同上 |
 
-> 宝塔默认使用 Nginx，`.htaccess` 不生效，必须按 8.4.5 在站点配置中加入拒绝规则。
+> 宝塔默认使用 Nginx，`.htaccess` 不生效，必须按 8.4.5 在站点配置中加入 `location ^~ /api/ { return 404; }`。
 
 ### 2.3 部署文件清单
 
-- **必需**：`api*.php`、`auth.php`、`rate_limit.php`、`amap.php`、`db.php`、`helpers.php`、`config.php`、`schema.sql`、`amap-js-proxy.php`、`index.html`、`user.html`、`admin.html`、`404.html`；
-- **按环境需要**：`.htaccess`（Apache 必需；宝塔 Nginx 不生效，改用 Nginx 规则）、`.user.ini`（宝塔/PHP-FPM 建议）；
+- **必需（根目录）**：`api.php`、`amap-js-proxy.php`、`index.html`、`user.html`、`admin.html`、`404.html`、`schema.sql`；
+- **必需（api/ 目录）**：`config.php`、`helpers.php`、`db.php`、`auth.php`、`rate_limit.php`、`amap.php`、`api_auth.php`、`api_weather.php`、`api_cities.php`、`api_admin.php`；
+- **按环境需要**：`.htaccess` 与 `api/.htaccess`（Apache）、`.user.ini`（宝塔/PHP-FPM 建议）、Nginx 规则（宝塔/通用 Nginx 必须）；
 - **可选**：`doc/`、`mulu.md`；
 - **不要上传**：`.codeartsdoer/`、本地生成的 `weather.db*`（迁移场景除外）。
 
@@ -104,20 +105,20 @@
 
 | 文件 | 职责 | 依赖 |
 |------|------|------|
-| `config.php` | 定义 `APP_ROOT`、`DB_FILE`、`APP_TIMEZONE`、`SESSION_NAME` | 无 |
-| `helpers.php` | `json_out()` 统一响应、`fail()` 抛业务异常、`param()` 读参、`apply_cors()`、`client_ip()`、`client_fingerprint()`、`http_get()`、`log_access()` | `db.php`（配置与日志） |
-| `db.php` | PDO 单例、`db_init()` 建表种子、`get_config()` / `set_config()`、`db_gc()` | `schema.sql` |
-| `auth.php` | `identify()` 双模式识别、`enforce_blacklist()`、`require_login/admin`、`authenticate()`、`session_login/logout`、`login_fail_guard()` | `helpers.php`、`db.php` |
-| `rate_limit.php` | `rate_check()`：游客按 IP+指纹，用户按 `user_id`，管理员放行 | `db.php`、`helpers.php` |
-| `amap.php` | `amap_proxy()`：参数白名单、Key 注入、数字签名、缓存、调用统计；`amap_js_config()` | `db.php`、`helpers.php` |
-| `api.php` | 组装路由、中间件编排、统一日志与响应 | 上述全部 |
-| `api_auth.php` | `auth_*` 处理函数 + 路由数组 | `auth.php` |
-| `api_weather.php` | `wx_*` 处理函数 + 路由数组 | `amap.php` |
-| `api_cities.php` | `city_*` 处理函数 + 路由数组 | `db.php` |
-| `api_admin.php` | `adm_*` 处理函数 + 路由数组 | `db.php`、`auth.php` |
-| `amap-js-proxy.php` | 从数据库读取 JS Key / 安全密钥，输出 `window._AMapSecurityConfig` 与 `window.__AMAP_READY` | `db.php`、`amap.php` |
+| `api.php` | 根目录唯一入口：加载模块、组装路由、中间件编排、统一日志与响应 | `api/*` |
+| `api/config.php` | 定义 `APP_ROOT`（项目根）、`API_DIR`（api 目录）、`DB_FILE`、`APP_TIMEZONE`、`SESSION_NAME` | 无 |
+| `api/helpers.php` | `json_out()` 统一响应、`fail()` 抛业务异常、`param()` 读参、`apply_cors()`、`client_ip()`、`client_fingerprint()`、`http_get()`、`log_access()` | `api/db.php`（配置与日志） |
+| `api/db.php` | PDO 单例、`db_init()` 建表种子、`get_config()` / `set_config()`、`db_gc()` | 根目录 `schema.sql` |
+| `api/auth.php` | `identify()` 双模式识别、`enforce_blacklist()`、`require_login/admin`、`authenticate()`、`session_login/logout`、`login_fail_guard()` | `api/helpers.php`、`api/db.php` |
+| `api/rate_limit.php` | `rate_check()`：游客按 IP+指纹，用户按 `user_id`，管理员放行 | `api/db.php`、`api/helpers.php` |
+| `api/amap.php` | `amap_proxy()`：参数白名单、Key 注入、数字签名、缓存、调用统计；`amap_js_config()` | `api/db.php`、`api/helpers.php` |
+| `api/api_auth.php` | `auth_*` 处理函数 + 路由数组 | `api/auth.php` |
+| `api/api_weather.php` | `wx_*` 处理函数 + 路由数组 | `api/amap.php` |
+| `api/api_cities.php` | `city_*` 处理函数 + 路由数组 | `api/db.php` |
+| `api/api_admin.php` | `adm_*` 处理函数 + 路由数组 | `api/db.php`、`api/auth.php` |
+| `amap-js-proxy.php` | 根目录入口：读取 JS Key / 安全密钥，输出 `window._AMapSecurityConfig` 与 `window.__AMap_READY` | `api/db.php`、`api/amap.php` |
 
-> 路由模块约定：每个 `api_*.php` 末尾 `return [...]`，键为 action 名，值为 `['auth' => public|guest_token|user|admin, 'rate' => bool, 'amap' => bool, 'handler' => callable]`。`api.php` 用 `array_merge` 合并，便于按模块扩展。
+> 路由模块约定：每个 `api/api_*.php` 末尾 `return [...]`，键为 action 名，值为 `['auth' => public|guest_token|user|admin, 'rate' => bool, 'amap' => bool, 'handler' => callable]`。根目录 `api.php` 用 `array_merge` 合并，便于按模块扩展。
 
 ---
 
@@ -260,15 +261,15 @@ flowchart TD
   U[user.html] -->|fetch api.php?action=...| API[api.php 统一入口]
   A[admin.html] -->|fetch api.php?action=admin_*| API
   API --> M1[CORS + Session]
-  M1 --> M2[auth.php identify]
+  M1 --> M2[api/auth.php identify]
   M2 --> M3[enforce_blacklist]
-  M3 --> M4[rate_limit.php]
+  M3 --> M4[api/rate_limit.php]
   M4 --> R[路由分发 array_merge]
-  R --> AA[api_auth.php]
-  R --> AW[api_weather.php]
-  R --> AC[api_cities.php]
-  R --> AD[api_admin.php]
-  AW --> P[amap.php amap_proxy]
+  R --> AA[api/api_auth.php]
+  R --> AW[api/api_weather.php]
+  R --> AC[api/api_cities.php]
+  R --> AD[api/api_admin.php]
+  AW --> P[api/amap.php amap_proxy]
   P -->|注入 Key + 签名| AM[高德 REST API]
   P <--> C[(amap_cache)]
   AA --> D[(weather.db)]
@@ -423,17 +424,16 @@ location ~* \.(db|db-wal|db-shm|sqlite|sql|md|ini|log)$ {
     return 404;
 }
 
-# 内部 PHP 模块禁止直接访问（api.php 与 amap-js-proxy.php 不受影响）
-location ~ ^/(config|helpers|db|auth|rate_limit|amap|api_auth|api_weather|api_cities|api_admin)\.php$ {
-    return 404;
-}
+# 后端模块目录整体禁止直接访问（根目录 api.php 与 amap-js-proxy.php 不受影响）
+location = /api { return 404; }
+location ^~ /api/ { return 404; }
 ```
 
 修改后执行 `nginx -t` 校验并重载（宝塔面板可直接点「重载配置」）。
 
-> 可选加固：把数据库移出 Web 根目录。例如创建 `/www/data/weather/`（属主 `www`），在 `config.php` 中修改 `DB_FILE`，或通过站点配置传入：
+> 可选加固：把数据库移出 Web 根目录。例如创建 `/www/data/weather/`（属主 `www`），在 `api/config.php` 中修改 `DB_FILE`，或通过站点配置传入：
 > `fastcgi_param WEATHER_DB_FILE /www/data/weather/weather.db;`
-> （`config.php` 会优先读取 `$_SERVER['WEATHER_DB_FILE']` 或环境变量）。同时确保该目录在 `open_basedir` 范围内。
+> （`api/config.php` 会优先读取 `$_SERVER['WEATHER_DB_FILE']` 或环境变量）。同时确保该目录在 `open_basedir` 范围内。
 
 #### 8.4.6 PHP 配置建议（宝塔「PHP 设置 → 配置修改」）
 
@@ -458,7 +458,7 @@ allow_url_fopen = On
 - **网站防篡改**：会将站点目录设为只读，导致 SQLite 无法写入（提示“数据库目录不可写”）；请关闭或把站点目录加入白名单；
 - **宝塔 Nginx WAF**：可能对高频访问或含 SQL 关键字的搜索词返回 403/429，请在 WAF 日志中确认后放行；
 - 系统自身也会返回 429（业务码 1005），注意与 WAF 拦截区分；
-- 宝塔开启「强制 HTTPS」后，`config.php` 的 `is_https()` 会正常识别，Session Cookie 自动加 `Secure`。
+- 宝塔开启「强制 HTTPS」后，`api/config.php` 的 `is_https()` 会正常识别，Session Cookie 自动加 `Secure`。
 
 #### 8.4.8 备份（宝塔计划任务）
 
@@ -485,12 +485,13 @@ cp -a /www/wwwroot/weather.yousb.top/weather.db* /www/backup/weather/$(date +%F_
 
 ### 8.5 Apache 场景
 
-- 保留根目录 `.htaccess` 即可自动生效（需 `AllowOverride All`）；
-- 数据库与内部模块保护规则已写入 `.htaccess`，无需额外配置。
+- 保留根目录 `.htaccess` 与 `api/.htaccess`，均需 `AllowOverride All` 生效；
+- 根 `.htaccess` 保护数据库、SQL、文档等敏感文件；`api/.htaccess` 拒绝 Web 直接访问后端模块目录；
+- 不影响根目录 `api.php` / `amap-js-proxy.php` 通过文件系统加载模块。
 
 ### 8.6 中国时区
 
-`config.php` 已设置 `Asia/Shanghai`。若服务器时区不同，PHP 生成的日志时间与令牌过期均使用该时区/时间戳，不影响逻辑。
+`api/config.php` 已设置 `Asia/Shanghai`。若服务器时区不同，PHP 生成的日志时间与令牌过期均使用该时区/时间戳，不影响逻辑。
 
 ---
 
@@ -541,3 +542,4 @@ cp -a /www/wwwroot/weather.yousb.top/weather.db* /www/backup/weather/$(date +%F_
 | v1.0.0 | 2026-11-19 | 初版：完成用户端、管理后台、统一 API、SQLite 配置化、双模式鉴权、限流、缓存、黑名单、看板与文档 |
 | v1.0.1 | 2026-11-19 | 宝塔面板（BT Panel）兼容：修复失效 `.user.ini` 的 `open_basedir`；Session Cookie 参数兼容 PHP 7.2+；新增 `pdo_sqlite` 检测与可读错误提示；WAL 初始化容错；支持 `WEATHER_DB_FILE` 将数据库外置；移除 `X-Powered-By`；补充宝塔 Nginx、PHP、权限、防篡改与备份部署文档 |
 | v1.0.2 | 2026-11-19 | 修复直接输入中文城市名时实时天气（lives）为空：天气查询先用地理编码解析 adcode 再请求高德，接口返回解析后的 `adcode` / `city`；前端在无实况时降级展示今日预报温度范围，并保存解析后的 adcode 供自动刷新与关注城市使用；侧栏增加关注城市空状态提示 |
+| v1.0.3 | 2026-11-19 | 后端模块目录化：10 个 PHP 模块移入 `api/`，根目录仅保留 `api.php` 与 `amap-js-proxy.php` 作为入口；`api/config.php` 新增 `API_DIR` 并将 `APP_ROOT` 指向项目根；Nginx/Apache 访问控制改为目录级（`location ^~ /api/`、`api/.htaccess`）；同步更新目录结构、部署清单与文档索引 |

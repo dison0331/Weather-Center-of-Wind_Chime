@@ -1,15 +1,23 @@
 <?php
 /**
- * amap-js-proxy.php —— 高德 JS API 安全配置与 SDK 动态加载器
+ * amap-js-proxy.php —— 高德 JS API 安全配置与 SDK 动态加载器（根目录入口）
  * 前端通过 <script src="amap-js-proxy.php"></script> 引入，
  * Key / 安全密钥从数据库读取，前端源码中不出现任何明文密钥。
  */
 define('IN_PROJECT', true);
 
-require_once __DIR__ . '/config.php';
-require_once __DIR__ . '/helpers.php';
-require_once __DIR__ . '/db.php';
-require_once __DIR__ . '/amap.php';
+if (!is_file(__DIR__ . '/api/config.php')) {
+    header('Content-Type: application/javascript; charset=utf-8');
+    header('X-Content-Type-Options: nosniff');
+    http_response_code(500);
+    echo "window.__AMAP_READY = Promise.reject(new Error('后端模块目录 api/ 缺失'));";
+    exit;
+}
+
+require_once __DIR__ . '/api/config.php';
+require_once __DIR__ . '/api/helpers.php';
+require_once __DIR__ . '/api/db.php';
+require_once __DIR__ . '/api/amap.php';
 
 header('Content-Type: application/javascript; charset=utf-8');
 header('Cache-Control: no-store, no-cache, must-revalidate');

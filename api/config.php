@@ -13,7 +13,8 @@ if (!defined('IN_PROJECT')) {
     exit('Access Denied');
 }
 
-define('APP_ROOT', __DIR__);
+define('APP_ROOT', dirname(__DIR__));
+define('API_DIR', __DIR__);
 
 $weatherDbFile = '';
 if (isset($_SERVER['WEATHER_DB_FILE']) && trim((string) $_SERVER['WEATHER_DB_FILE']) !== '') {
@@ -28,6 +29,6 @@ if (isset($_SERVER['WEATHER_DB_FILE']) && trim((string) $_SERVER['WEATHER_DB_FIL
 define('DB_FILE', $weatherDbFile !== '' ? $weatherDbFile : APP_ROOT . '/weather.db');
 define('APP_TIMEZONE', 'Asia/Shanghai');
 define('SESSION_NAME', 'WEATHER_SESSID');
-define('APP_VERSION', '1.0.2');
+define('APP_VERSION', '1.0.3');
 
 date_default_timezone_set(APP_TIMEZONE);

@@ -1,6 +1,6 @@
 # 天气中心 · 部署文档
 
-> 适用版本：**v1.0.2** ｜ 技术栈：PHP 7.2+（推荐 7.4 / 8.0 / 8.1 / 8.2）+ SQLite + 高德开放平台
+> 适用版本：**v1.0.3** ｜ 技术栈：PHP 7.2+（推荐 7.4 / 8.0 / 8.1 / 8.2）+ SQLite + 高德开放平台
 >
 > 本文档是可直接照做的部署手册，覆盖 **宝塔面板（推荐）**、**Apache**、**Nginx + PHP-FPM** 三种环境。
 > 架构、模块职责与数据流见 [README.md](README.md)；接口参数见 [API.md](API.md)。
@@ -105,22 +105,30 @@ ls /www/wwwroot/weather.yousb.top
 
 ### 4.2 上传文件
 
-将项目文件上传到站点根目录（FTP、宝塔文件管理、`scp` 均可）。
+将项目文件上传到站点根目录（FTP、宝塔文件管理、`scp` 均可），保持以下结构：
 
-**运行必需：**
+**运行必需（根目录）：**
 
 ```
-api.php  api_auth.php  api_weather.php  api_cities.php  api_admin.php
-auth.php  rate_limit.php  amap.php  db.php  helpers.php  config.php
-schema.sql  amap-js-proxy.php
+api.php  amap-js-proxy.php
 index.html  user.html  admin.html  404.html
+schema.sql
+```
+
+**运行必需（api/ 目录）：**
+
+```
+api/
+├─ config.php  helpers.php  db.php  auth.php  rate_limit.php  amap.php
+└─ api_auth.php  api_weather.php  api_cities.php  api_admin.php
 ```
 
 **按环境需要：**
 
 ```
-.user.ini        宝塔/PHP-FPM 用户级配置（建议上传修复版）
-.htaccess        Apache 安全规则（Apache 必需；宝塔 Nginx 不生效）
+.htaccess          Apache 根目录安全规则（Apache 必需；宝塔 Nginx 不生效）
+api/.htaccess      Apache 下拒绝后端目录直接访问
+.user.ini          宝塔/PHP-FPM 用户级配置（建议上传修复版）
 ```
 
 **可选（不影响运行）：**
@@ -139,8 +147,9 @@ weather.db*      本地运行时数据库；首次部署由服务器自动创建
 
 注意：
 
-- 不要遗漏 `schema.sql`（建库必需）；
-- 不要遗漏 `api_weather.php` 等模块文件（入口会 `require` 它们）；
+- 不要遗漏 `schema.sql`（建库必需，保持在根目录）；
+- 不要遗漏 `api/` 目录及其中的 10 个模块（根目录 `api.php` 会按路径 `require`）；
+- 不要把 `api/` 内的模块移动到根目录或改名为入口文件；
 - `.user.ini` 请使用本项目自带的修复版（旧主机路径已移除）；
 - `*.bak`、`*.zip`、`*.log` 等临时文件不要上传到站点根目录。
 
@@ -191,7 +200,7 @@ chown www:www /www/wwwroot/weather.yousb.top/weather.db*
 
 ### 4.7 配置 Nginx 安全规则（关键）
 
-宝塔默认是 **Nginx**，项目里的 `.htaccess` **不会生效**。必须把下面的规则加入站点配置，否则 `weather.db` 可能被直接下载。
+宝塔默认是 **Nginx**，项目里的 `.htaccess` **不会生效**。必须把下面的规则加入站点配置，否则 `weather.db` 可能被直接下载、`api/` 下的后端模块可能被直接请求。
 
 **文件位置**：`/www/server/panel/vhost/nginx/你的域名.conf`（也可在宝塔「网站 → 设置 → 配置文件」中编辑）。
 
@@ -203,10 +212,9 @@ location ~* \.(db|db-wal|db-shm|sqlite|sql|md|ini|log)$ {
     return 404;
 }
 
-# 内部 PHP 模块禁止直接访问（api.php 与 amap-js-proxy.php 不受影响）
-location ~ ^/(config|helpers|db|auth|rate_limit|amap|api_auth|api_weather|api_cities|api_admin)\.php$ {
-    return 404;
-}
+# 后端模块目录整体禁止直接访问（根目录 api.php 与 amap-js-proxy.php 不受影响）
+location = /api { return 404; }
+location ^~ /api/ { return 404; }
 ```
 
 > 如需展示项目自带的 `404.html`，在站点配置的 `server` 级别加入 `error_page 404 /404.html;`（不要放进 `location` 内）。
@@ -219,8 +227,8 @@ nginx -t && nginx -s reload
 
 （宝塔面板可直接点「重载配置」。）
 
-> 规则只会拦截 `/config.php`、`/db.php`、`/weather.db` 等，**不会**拦截 `/api.php` 与 `/amap-js-proxy.php`。
-> 若使用 Apache，跳过本小节，`.htaccess` 已包含相同保护。
+> 规则会拒绝 `/api/config.php` 等全部后端模块，但不会拦截根目录的 `/api.php` 与 `/amap-js-proxy.php`。
+> 若使用 Apache，跳过本小节：根 `.htaccess` 保护敏感文件，`api/.htaccess` 拒绝模块目录。
 
 ### 4.8 PHP 配置建议
 
@@ -257,7 +265,7 @@ https://你的域名/api.php?action=ping
   "code": 0,
   "message": "ok",
   "data": {
-    "version": "1.0.1",
+    "version": "1.0.3",
     "time": "2026-11-19 10:00:00",
     "site_name": "天气中心",
     "register_enabled": true
@@ -277,7 +285,7 @@ weather.db-shm
 
 ```bash
 curl -sI https://你的域名/weather.db | head -n 1   # 期望 HTTP/1.1 404
-curl -sI https://你的域名/config.php | head -n 1   # 期望 404（无规则时为 403，也可接受）
+curl -sI https://你的域名/api/config.php | head -n 1  # 期望 404（目录级拒绝）
 curl -s  https://你的域名/api.php?action=ping      # 期望 code=0
 ```
 
@@ -344,12 +352,17 @@ sqlite3 /www/wwwroot/weather.yousb.top/weather.db \
 5. 站点根目录可写，属主与 Web 运行用户一致；
 6. 访问 `api.php?action=ping` 初始化，后续步骤同 4.9 ~ 4.10。
 
-`.htaccess` 已包含：
+根 `.htaccess` 已包含：
 
 - 禁止访问 `.db / .db-wal / .db-shm / .sql / .md / .ini`；
 - 禁止目录索引；
 - 404 使用项目自带页面（`ErrorDocument 404 /404.html`）；
 - 关闭 `display_errors`（若模块为 mod_php）。
+
+`api/.htaccess` 已包含：
+
+- 拒绝 Web 直接访问 `api/` 目录下的后端模块；
+- 不影响根目录 `api.php` / `amap-js-proxy.php` 通过文件系统 `require` 这些模块。
 
 ---
 
@@ -367,9 +380,8 @@ server {
     location ~* \.(db|db-wal|db-shm|sqlite|sql|md|ini|log)$ {
         return 404;
     }
-    location ~ ^/(config|helpers|db|auth|rate_limit|amap|api_auth|api_weather|api_cities|api_admin)\.php$ {
-        return 404;
-    }
+    location = /api { return 404; }
+    location ^~ /api/ { return 404; }
 
     location / {
         try_files $uri $uri/ =404;
@@ -410,7 +422,7 @@ chmod 750 /www/data/weather
 
 2. 让系统读取新路径，二选一：
 
-**方式 A（最简单）**：编辑 `config.php` 的 `DB_FILE` 默认值：
+**方式 A（最简单）**：编辑 `api/config.php` 的 `DB_FILE` 默认值：
 
 ```php
 define('DB_FILE', '/www/data/weather/weather.db');
@@ -422,7 +434,7 @@ define('DB_FILE', '/www/data/weather/weather.db');
 fastcgi_param WEATHER_DB_FILE /www/data/weather/weather.db;
 ```
 
-`config.php` 会优先读取 `$_SERVER['WEATHER_DB_FILE']` 或环境变量。
+`api/config.php` 会优先读取 `$_SERVER['WEATHER_DB_FILE']` 或环境变量。
 
 3. 如果开启了防跨站（`open_basedir`），需把 `/www/data/weather` 加入允许路径：
 
@@ -511,7 +523,7 @@ https://weather.example.com,https://www.example.com
 | 入口页 | 访问 `/` | 显示入口导航 |
 | API 健康 | `/api.php?action=ping` | `code=0`，版本正确 |
 | 数据库保护 | `/weather.db` | 404（Nginx 规则或 `.htaccess`） |
-| 内部模块保护 | `/config.php`、`/db.php` | 404（有规则）或 403 Access Denied |
+| 内部模块保护 | `/api/config.php`、`/api/db.php` | 404（目录级拒绝） |
 | 管理员登录 | `/admin.html` | 可登录，非管理员账号被拒绝 |
 | 修改密码 | 后台 → 管理员密码 | 修改成功，旧密码失效 |
 | 注册开关 | 后台 → 系统配置 | 关闭后用户端隐藏注册入口 |
