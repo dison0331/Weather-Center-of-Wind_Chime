@@ -3,6 +3,7 @@
  * api.php —— 全部前端请求的统一入口（保留在站点根目录）
  * 路由格式：api.php?action=xxx
  * 后端模块统一位于 api/ 目录，通过文件系统加载；Web 直接访问 api/ 由 Nginx 规则或 api/.htaccess 拒绝。
+ * 配置唯一来源为 api/config.toml（修改后下一次请求自动生效）。
  * 处理链：建库 → CORS → Session → 身份识别 → 黑名单 → 鉴权 → 限流 → 业务处理 → 日志 → 统一响应
  *
  * 宝塔兼容：
@@ -12,13 +13,13 @@
  */
 define('IN_PROJECT', true);
 
-if (!is_file(__DIR__ . '/api/config.php')) {
+if (!is_file(__DIR__ . '/api/config.php') || !is_file(__DIR__ . '/api/toml.php')) {
     header('Content-Type: application/json; charset=utf-8');
     header('X-Content-Type-Options: nosniff');
     http_response_code(500);
     echo json_encode([
         'code'    => 5000,
-        'message' => '后端模块目录 api/ 缺失，请完整上传项目文件',
+        'message' => '后端模块目录 api/ 缺失（config.php / toml.php），请完整上传项目文件',
         'data'    => null,
     ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     exit;
@@ -39,6 +40,10 @@ $startTime = microtime(true);
 header('Content-Type: application/json; charset=utf-8');
 header('X-Content-Type-Options: nosniff');
 
+if (defined('CONFIG_PARSE_ERROR') && CONFIG_PARSE_ERROR !== '') {
+    json_out(5000, 'config.toml 语法错误：' . CONFIG_PARSE_ERROR, null, 500);
+}
+
 try {
     db_init();
     db_gc();
@@ -47,6 +52,8 @@ try {
     $message = '数据库初始化失败，请检查站点目录写权限';
     if (!extension_loaded('pdo_sqlite')) {
         $message = 'PHP 未启用 pdo_sqlite 扩展，请在宝塔面板「软件商店 → PHP → 设置 → 安装扩展」中安装后重试';
+    } elseif (strpos($e->getMessage(), 'config.toml') !== false) {
+        $message = $e->getMessage();
     } elseif (stripos($e->getMessage(), 'readonly') !== false || stripos($e->getMessage(), 'read-only') !== false) {
         $message = '数据库为只读（可能开启了宝塔「网站防篡改」），请关闭防篡改或将站点目录加入白名单';
     } elseif (stripos($e->getMessage(), 'unable to open database') !== false) {

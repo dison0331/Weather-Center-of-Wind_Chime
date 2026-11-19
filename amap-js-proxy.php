@@ -2,11 +2,11 @@
 /**
  * amap-js-proxy.php —— 高德 JS API 安全配置与 SDK 动态加载器（根目录入口）
  * 前端通过 <script src="amap-js-proxy.php"></script> 引入，
- * Key / 安全密钥从数据库读取，前端源码中不出现任何明文密钥。
+ * Key / 安全密钥从 api/config.toml 读取，前端源码中不出现任何明文密钥。
  */
 define('IN_PROJECT', true);
 
-if (!is_file(__DIR__ . '/api/config.php')) {
+if (!is_file(__DIR__ . '/api/config.php') || !is_file(__DIR__ . '/api/toml.php')) {
     header('Content-Type: application/javascript; charset=utf-8');
     header('X-Content-Type-Options: nosniff');
     http_response_code(500);
@@ -23,7 +23,20 @@ header('Content-Type: application/javascript; charset=utf-8');
 header('Cache-Control: no-store, no-cache, must-revalidate');
 header('X-Content-Type-Options: nosniff');
 
-db_init();
+if (defined('CONFIG_PARSE_ERROR') && CONFIG_PARSE_ERROR !== '') {
+    http_response_code(500);
+    echo "window.__AMAP_READY = Promise.reject(new Error('config.toml 语法错误，请检查配置文件'));";
+    exit;
+}
+
+try {
+    db_init();
+} catch (Throwable $e) {
+    error_log('[amap-js-proxy] ' . $e->getMessage());
+    http_response_code(500);
+    echo "window.__AMAP_READY = Promise.reject(new Error('配置或数据库初始化失败'));";
+    exit;
+}
 
 if (!apply_cors()) {
     http_response_code(403);

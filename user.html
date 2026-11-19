@@ -848,6 +848,7 @@ html[data-theme="dark"] .toast{background:#2a3a56}
       return;
     }
     $('serverTime').textContent = state.config.server_time || '--';
+    document.documentElement.lang = state.config.language || 'zh-CN';
     $('registerBtn').hidden = !state.config.register_enabled;
     $('tabRegister').hidden = !state.config.register_enabled;
     document.title = (state.config.site_name || '天气中心');

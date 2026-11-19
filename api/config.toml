@@ -1,0 +1,41 @@
+# 天气系统配置（TOML）
+# 修改后下一次请求自动生效；也可在管理后台保存。
+# api/ 目录已整体禁止 Web 访问，本文件不会被直接下载。
+
+# ===== 站点与运行 =====
+site_name = "天气中心"
+app_version = "1.1.0"
+timezone = "Asia/Shanghai"
+language = "zh-CN"
+default_city = "深圳"
+auto_refresh = 300
+allow_origin = ""
+trust_proxy = false
+register_enabled = true
+
+# ===== 数据库 =====
+# 相对路径基于项目根目录；也可填写绝对路径（如 /www/data/weather/weather.db）
+database_path = "weather.db"
+
+# ===== 高德开放平台 =====
+amap_web_key = ""
+amap_web_secret = ""
+amap_js_key = ""
+amap_js_security_code = ""
+amap_daily_quota = 5000
+
+# ===== 限流与配额 =====
+guest_rate_limit = 60
+guest_amap_rate_limit = 20
+user_rate_limit = 120
+rate_window = 60
+login_fail_limit = 10
+login_fail_window = 600
+guest_token_ttl = 3600
+
+# ===== 缓存与数据清理 =====
+cache_ttl_weather = 600
+cache_ttl_tips = 300
+cache_ttl_regeo = 86400
+cache_ttl_geocode = 86400
+log_retain_days = 30

@@ -63,7 +63,7 @@ X-RateLimit-Remaining: 59
   "code": 0,
   "message": "ok",
   "data": {
-    "version": "1.0.0",
+    "version": "1.1.0",
     "time": "2026-11-19 10:00:00",
     "site_name": "天气中心",
     "register_enabled": true
@@ -83,9 +83,10 @@ X-RateLimit-Remaining: 59
     "site_name": "天气中心",
     "register_enabled": true,
     "default_city": "深圳",
+    "language": "zh-CN",
     "auto_refresh": 300,
     "amap_ready": true,
-    "version": "1.0.0",
+    "version": "1.1.0",
     "server_time": "2026-11-19 10:00:00"
   }
 }
@@ -460,7 +461,7 @@ X-RateLimit-Remaining: 59
 
 `POST api.php?action=admin_config_get`
 
-返回 `config`（全部配置项 + `updated_at`）。仅管理员可见，包含高德密钥。
+返回 `config`（全部配置项 + `updated_at`）与 `file`（配置文件 basename）。配置来自 `api/config.toml`，仅管理员可见，包含高德密钥。
 
 ### 5.7 admin_config_save
 
@@ -472,6 +473,10 @@ X-RateLimit-Remaining: 59
 {
   "config": {
     "site_name": "天气中心",
+    "app_version": "1.1.0",
+    "timezone": "Asia/Shanghai",
+    "language": "zh-CN",
+    "database_path": "weather.db",
     "amap_web_key": "xxxx",
     "amap_web_secret": "xxxx",
     "amap_js_key": "xxxx",
@@ -487,7 +492,15 @@ X-RateLimit-Remaining: 59
 }
 ```
 
-仅保存白名单字段；枚举、数值范围、URL 格式校验通过后事务写入，立即生效。
+返回 `saved`（已保存键）、`deferred`（下一次请求生效的键）、`config`（最新配置）、`updated_at`、`file`。
+
+保存规则：
+
+- 全部配置写入 `api/config.toml`（原子写 + 文件锁 + 自动备份 `config.toml.bak`）；
+- 高德 Key、限流、注册开关等保存后立即生效；
+- `app_version`、`timezone`、`language`、`database_path` 在下一次请求生效；
+- `database_path` 会校验目标目录存在且可写；`timezone` 必须是有效 IANA 时区；
+- TOML 语法错误时拒绝保存，返回 1001。
 
 ### 5.8 admin_change_password
 

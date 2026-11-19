@@ -2,12 +2,12 @@ Options -Indexes
 ErrorDocument 404 /404.html
 
 <IfModule mod_authz_core.c>
-    <FilesMatch "\.(db|db-wal|db-shm|sql|md|ini)$">
+    <FilesMatch "\.(db|db-wal|db-shm|sql|md|ini|toml|bak|tmp|lock)$">
         Require all denied
     </FilesMatch>
 </IfModule>
 <IfModule !mod_authz_core.c>
-    <FilesMatch "\.(db|db-wal|db-shm|sql|md|ini)$">
+    <FilesMatch "\.(db|db-wal|db-shm|sql|md|ini|toml|bak|tmp|lock)$">
         Order allow,deny
         Deny from all
     </FilesMatch>

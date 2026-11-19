@@ -23,6 +23,7 @@ function auth_config_public($identity)
         'site_name'        => get_config('site_name', '天气中心'),
         'register_enabled' => get_config('register_enabled', '1') === '1',
         'default_city'     => get_config('default_city', '深圳'),
+        'language'         => get_config('language', 'zh-CN'),
         'auto_refresh'     => get_config_int('auto_refresh', 300),
         'amap_ready'       => trim((string) get_config('amap_js_key', '')) !== '',
         'version'          => APP_VERSION,

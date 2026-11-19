@@ -197,21 +197,20 @@ function adm_user_status($identity)
     return ['id' => $id, 'status' => $status];
 }
 
-/** 读取系统配置 */
+/** 读取系统配置（config.toml） */
 function adm_config_get($identity)
 {
     $all = config_all(true);
-    $fields = array_keys(default_config());
     $result = [];
-    foreach ($fields as $key) {
+    foreach (array_keys(default_config()) as $key) {
         $result[$key] = $all[$key] ?? '';
     }
-    $updated = db_val('SELECT MAX(updated_at) FROM system_config', [], '');
-    $result['updated_at'] = (string) $updated;
-    return ['config' => $result];
+    $mtime = @filemtime(CONFIG_FILE);
+    $result['updated_at'] = $mtime ? date('Y-m-d H:i:s', $mtime) : '';
+    return ['config' => $result, 'file' => basename(CONFIG_FILE)];
 }
 
-/** 保存系统配置（即时生效） */
+/** 保存系统配置（写入 config.toml，支持热重载） */
 function adm_config_save($identity)
 {
     $input = param('config', []);
@@ -222,11 +221,17 @@ function adm_config_save($identity)
     if (!is_array($input) || empty($input)) {
         fail(1001, '没有可保存的配置', 400);
     }
+    if (defined('CONFIG_PARSE_ERROR') && CONFIG_PARSE_ERROR !== '') {
+        fail(1001, 'config.toml 存在语法错误，请先修复文件：' . CONFIG_PARSE_ERROR, 400);
+    }
 
     $stringFields = [
         'site_name'             => 60,
+        'app_version'           => 20,
+        'timezone'              => 60,
         'default_city'          => 50,
         'allow_origin'          => 300,
+        'database_path'         => 300,
         'amap_web_key'          => 200,
         'amap_web_secret'       => 200,
         'amap_js_key'           => 200,
@@ -235,6 +240,7 @@ function adm_config_save($identity)
     $enumFields = [
         'register_enabled' => ['0', '1'],
         'trust_proxy'      => ['0', '1'],
+        'language'         => ['zh-CN', 'en-US'],
     ];
     $numberRanges = [
         'auto_refresh'          => [30, 86400],
@@ -288,6 +294,29 @@ function adm_config_save($identity)
         $pairs[$key] = (string) $value;
     }
 
+    if (isset($pairs['timezone']) && !toml_valid_timezone($pairs['timezone'])) {
+        fail(1001, '时区无效，请填写 IANA 时区（如 Asia/Shanghai）', 400);
+    }
+    if (isset($pairs['app_version']) && $pairs['app_version'] !== ''
+        && !preg_match('/^\d{1,3}\.\d{1,3}\.\d{1,3}$/', $pairs['app_version'])) {
+        fail(1001, '版本号格式应为 x.y.z', 400);
+    }
+    if (isset($pairs['database_path']) && $pairs['database_path'] !== '') {
+        $target = toml_resolve_path($pairs['database_path'], APP_ROOT);
+        $dbDir = dirname($target);
+        if (!is_dir($dbDir) || !is_writable($dbDir)) {
+            fail(1001, '数据库目录不存在或不可写：' . $dbDir, 400);
+        }
+        if (in_array(strtolower(pathinfo($target, PATHINFO_EXTENSION)), ['php', 'toml', 'sql', 'ini', 'md', 'html'], true)) {
+            fail(1001, '数据库路径不能指向代码或配置文件', 400);
+        }
+        if (is_dir($target)) {
+            fail(1001, '数据库路径不能指向目录', 400);
+        }
+        if (is_file($target) && !is_writable($target)) {
+            fail(1001, '数据库文件不可写：' . $target, 400);
+        }
+    }
     if (isset($pairs['allow_origin']) && $pairs['allow_origin'] !== '') {
         foreach (explode(',', $pairs['allow_origin']) as $origin) {
             $origin = trim($origin);
@@ -300,8 +329,27 @@ function adm_config_save($identity)
         fail(1001, '没有可保存的配置', 400);
     }
 
-    set_config_many($pairs);
-    return ['saved' => array_keys($pairs), 'config' => config_all(true)];
+    try {
+        set_config_many($pairs);
+    } catch (Throwable $e) {
+        error_log('[config] 保存失败：' . $e->getMessage());
+        fail(5000, '配置保存失败：' . $e->getMessage(), 500);
+    }
+
+    $deferred = [];
+    foreach (['app_version', 'timezone', 'language', 'database_path'] as $key) {
+        if (array_key_exists($key, $pairs)) {
+            $deferred[] = $key;
+        }
+    }
+    $mtime = @filemtime(CONFIG_FILE);
+    return [
+        'saved'      => array_keys($pairs),
+        'deferred'   => $deferred,
+        'config'     => config_all(true),
+        'updated_at' => $mtime ? date('Y-m-d H:i:s', $mtime) : '',
+        'file'       => basename(CONFIG_FILE),
+    ];
 }
 
 /** 修改当前管理员密码 */

@@ -1,6 +1,10 @@
 -- ============================================================
 -- 天气系统 · SQLite 建表脚本（SQLite 3 方言）
--- 首次请求 api.php 时由 db.php 自动执行，PRAGMA user_version = 1
+-- 首次请求 api.php 时由 db.php 自动执行，PRAGMA user_version = 2
+--
+-- 配置已迁移到 api/config.toml，数据库只保存用户与业务数据。
+-- 旧版本升级时 db.php 会把 system_config 内容自动迁移到 config.toml，
+-- 迁移完成并确认无误后可手动执行：DROP TABLE IF EXISTS system_config;
 -- ============================================================
 
 -- 1. 用户表
@@ -30,14 +34,7 @@ CREATE TABLE IF NOT EXISTS user_cities (
 );
 CREATE INDEX IF NOT EXISTS idx_user_cities_user ON user_cities (user_id, sort_order);
 
--- 3. 系统配置表
-CREATE TABLE IF NOT EXISTS system_config (
-    cfg_key    TEXT PRIMARY KEY,
-    cfg_value  TEXT NOT NULL DEFAULT '',
-    updated_at TEXT NOT NULL
-);
-
--- 4. 访问日志表
+-- 3. 访问日志表
 CREATE TABLE IF NOT EXISTS access_logs (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     created_at  TEXT    NOT NULL,
@@ -58,7 +55,7 @@ CREATE INDEX IF NOT EXISTS idx_logs_fp        ON access_logs (fingerprint, ts);
 CREATE INDEX IF NOT EXISTS idx_logs_user      ON access_logs (user_id, ts);
 CREATE INDEX IF NOT EXISTS idx_logs_action    ON access_logs (action, ts);
 
--- 5. 游客令牌表（一次性 Token + 浏览器指纹绑定）
+-- 4. 游客令牌表（一次性 Token + 浏览器指纹绑定）
 CREATE TABLE IF NOT EXISTS guest_tokens (
     token       TEXT PRIMARY KEY,
     fingerprint TEXT NOT NULL,
@@ -69,7 +66,7 @@ CREATE TABLE IF NOT EXISTS guest_tokens (
 );
 CREATE INDEX IF NOT EXISTS idx_guest_tokens_fp ON guest_tokens (fingerprint);
 
--- 6. 黑名单表（IP / 浏览器指纹）
+-- 5. 黑名单表（IP / 浏览器指纹）
 CREATE TABLE IF NOT EXISTS blacklist (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
     type       TEXT NOT NULL CHECK (type IN ('ip', 'fingerprint')),
@@ -79,7 +76,7 @@ CREATE TABLE IF NOT EXISTS blacklist (
     UNIQUE (type, value)
 );
 
--- 7. 高德接口缓存表
+-- 6. 高德接口缓存表
 CREATE TABLE IF NOT EXISTS amap_cache (
     cache_key  TEXT PRIMARY KEY,
     payload    TEXT NOT NULL,
@@ -88,7 +85,7 @@ CREATE TABLE IF NOT EXISTS amap_cache (
 );
 CREATE INDEX IF NOT EXISTS idx_amap_cache_exp ON amap_cache (expires_at);
 
--- 8. 高德调用统计表（管理员看板：成功率 / 延迟 / 调用量）
+-- 7. 高德调用统计表（管理员看板：成功率 / 延迟 / 调用量）
 CREATE TABLE IF NOT EXISTS amap_calls (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
     ts         INTEGER NOT NULL,

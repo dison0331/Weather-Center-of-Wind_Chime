@@ -263,7 +263,7 @@ html[data-theme="dark"] .toast{background:#2a3a56}
 
       <!-- 系统配置 -->
       <section id="view-config" hidden>
-        <div class="view-head"><h2>系统配置</h2><span class="desc">配置写入数据库后即时生效</span></div>
+        <div class="view-head"><h2>系统配置</h2><span class="desc">配置写入 api/config.toml，保存后自动热重载；时区/语言/版本/数据库路径下次请求生效</span></div>
         <form id="configForm" class="panel">
           <div class="cfg-section">高德开放平台</div>
           <div class="cfg-grid">
@@ -305,9 +305,13 @@ html[data-theme="dark"] .toast{background:#2a3a56}
           <div class="cfg-section">站点与功能开关</div>
           <div class="cfg-grid">
             <label class="field"><span>站点名称</span><input data-cfg="site_name" type="text" maxlength="60"></label>
+            <label class="field"><span>站点版本号</span><input data-cfg="app_version" type="text" maxlength="20" placeholder="1.1.0"></label>
             <label class="field"><span>默认城市</span><input data-cfg="default_city" type="text" maxlength="50"></label>
-            <label class="field full"><span>跨域白名单（留空仅允许同源，多个用英文逗号分隔）</span><input data-cfg="allow_origin" type="text" maxlength="300" placeholder="https://weather.example.com"></label>
+            <label class="field"><span>时区（IANA）</span><input data-cfg="timezone" type="text" maxlength="60" placeholder="Asia/Shanghai"></label>
+            <label class="field"><span>语言</span><select data-cfg="language"><option value="zh-CN">简体中文</option><option value="en-US">English</option></select></label>
             <label class="field"><span>默认自动刷新间隔（秒）</span><input data-cfg="auto_refresh" type="number" min="30"></label>
+            <label class="field full"><span>数据库路径（相对项目根或绝对路径；下次请求生效）</span><input data-cfg="database_path" type="text" maxlength="300" placeholder="weather.db 或 /www/data/weather/weather.db"></label>
+            <label class="field full"><span>跨域白名单（留空仅允许同源，多个用英文逗号分隔）</span><input data-cfg="allow_origin" type="text" maxlength="300" placeholder="https://weather.example.com"></label>
             <div class="switch"><input data-cfg="register_enabled" id="cfgRegister" type="checkbox"><span>开放用户注册</span></div>
             <div class="switch"><input data-cfg="trust_proxy" id="cfgProxy" type="checkbox"><span>信任反向代理 X-Forwarded-For</span></div>
           </div>
@@ -835,7 +839,10 @@ html[data-theme="dark"] .toast{background:#2a3a56}
     try {
       var data = await api('admin_config_save', { config: cfg }, 'POST');
       fillConfig(data.config || {});
-      toast('配置已保存并即时生效');
+      var deferredHint = (data.deferred && data.deferred.length)
+        ? '；时区/语言/版本/数据库路径将在下一次请求生效'
+        : '，已即时生效';
+      toast('配置已保存到 config.toml' + deferredHint);
       loadOverview();
     } catch (e) {
       toast(e.message || '保存失败');

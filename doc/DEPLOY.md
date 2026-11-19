@@ -1,6 +1,6 @@
 # 天气中心 · 部署文档
 
-> 适用版本：**v1.0.3** ｜ 技术栈：PHP 7.2+（推荐 7.4 / 8.0 / 8.1 / 8.2）+ SQLite + 高德开放平台
+> 适用版本：**v1.1.0** ｜ 技术栈：PHP 7.2+（推荐 7.4 / 8.0 / 8.1 / 8.2）+ SQLite + TOML + 高德开放平台
 >
 > 本文档是可直接照做的部署手册，覆盖 **宝塔面板（推荐）**、**Apache**、**Nginx + PHP-FPM** 三种环境。
 > 架构、模块职责与数据流见 [README.md](README.md)；接口参数见 [API.md](API.md)。
@@ -119,7 +119,8 @@ schema.sql
 
 ```
 api/
-├─ config.php  helpers.php  db.php  auth.php  rate_limit.php  amap.php
+├─ config.php  toml.php  config.toml
+├─ helpers.php  db.php  auth.php  rate_limit.php  amap.php
 └─ api_auth.php  api_weather.php  api_cities.php  api_admin.php
 ```
 
@@ -148,7 +149,9 @@ weather.db*      本地运行时数据库；首次部署由服务器自动创建
 注意：
 
 - 不要遗漏 `schema.sql`（建库必需，保持在根目录）；
-- 不要遗漏 `api/` 目录及其中的 10 个模块（根目录 `api.php` 会按路径 `require`）；
+- 不要遗漏 `api/` 目录及其中的模块（根目录 `api.php` 会按路径 `require`）；
+- `api/config.toml` 是唯一配置源，必须上传；需对 PHP 运行用户（宝塔 `www`）可写（后台保存需要）；
+- 后台保存会生成 `api/config.toml.bak` 与 `api/config.toml.lock`，属运行时文件，不要上传；
 - 不要把 `api/` 内的模块移动到根目录或改名为入口文件；
 - `.user.ini` 请使用本项目自带的修复版（旧主机路径已移除）；
 - `*.bak`、`*.zip`、`*.log` 等临时文件不要上传到站点根目录。
@@ -198,6 +201,13 @@ find /www/wwwroot/weather.yousb.top -type f -exec chmod 644 {} \;
 chown www:www /www/wwwroot/weather.yousb.top/weather.db*
 ```
 
+`api/config.toml` 需要允许 PHP 进程写入（后台保存配置）：
+
+```bash
+chown www:www /www/wwwroot/weather.yousb.top/api/config.toml
+chmod 644 /www/wwwroot/weather.yousb.top/api/config.toml
+```
+
 ### 4.7 配置 Nginx 安全规则（关键）
 
 宝塔默认是 **Nginx**，项目里的 `.htaccess` **不会生效**。必须把下面的规则加入站点配置，否则 `weather.db` 可能被直接下载、`api/` 下的后端模块可能被直接请求。
@@ -208,7 +218,7 @@ chown www:www /www/wwwroot/weather.yousb.top/weather.db*
 
 ```nginx
 # 禁止下载 SQLite 数据库、建表脚本与文档
-location ~* \.(db|db-wal|db-shm|sqlite|sql|md|ini|log)$ {
+location ~* \.(db|db-wal|db-shm|sqlite|sql|md|ini|log|toml|bak|tmp|lock)$ {
     return 404;
 }
 
@@ -265,7 +275,7 @@ https://你的域名/api.php?action=ping
   "code": 0,
   "message": "ok",
   "data": {
-    "version": "1.0.3",
+    "version": "1.1.0",
     "time": "2026-11-19 10:00:00",
     "site_name": "天气中心",
     "register_enabled": true
@@ -286,6 +296,7 @@ weather.db-shm
 ```bash
 curl -sI https://你的域名/weather.db | head -n 1   # 期望 HTTP/1.1 404
 curl -sI https://你的域名/api/config.php | head -n 1  # 期望 404（目录级拒绝）
+curl -sI https://你的域名/api/config.toml | head -n 1  # 期望 404（目录级拒绝）
 curl -s  https://你的域名/api.php?action=ping      # 期望 code=0
 ```
 
@@ -300,7 +311,7 @@ curl -s  https://你的域名/api.php?action=ping      # 期望 code=0
    - JS API Key（`amap_js_key`）
    - JS API 安全密钥（`amap_js_security_code`）
    - 每日调用配额（可选，用于看板估算）
-5. 点击「保存配置」，无需重启，立即生效。
+5. 点击「保存配置」，写入 `api/config.toml`；高德 Key、限流等立即生效，时区/语言/版本/数据库路径在下一次请求生效。
 
 打开 `https://你的域名/user.html` 自检：
 
@@ -316,12 +327,14 @@ curl -s  https://你的域名/api.php?action=ping      # 期望 code=0
 宝塔「计划任务 → 添加任务 → Shell 脚本」，每天低峰执行：
 
 ```bash
-mkdir -p /www/backup/weather
-cp -a /www/wwwroot/weather.yousb.top/weather.db* /www/backup/weather/$(date +%F_%H%M)/
+STAMP=$(date +%F_%H%M)
+mkdir -p /www/backup/weather/$STAMP
+cp -a /www/wwwroot/weather.yousb.top/weather.db* /www/backup/weather/$STAMP/
+cp -a /www/wwwroot/weather.yousb.top/api/config.toml /www/backup/weather/$STAMP/
 find /www/backup/weather -type f -mtime +14 -delete
 ```
 
-备份内容包含 `weather.db`、`weather.db-wal`、`weather.db-shm` 三个文件。若安装了 `sqlite3` 命令，可用一致性更好的方式：
+备份内容包含数据库三文件与 `api/config.toml`。若安装了 `sqlite3` 命令，可用一致性更好的方式：
 
 ```bash
 sqlite3 /www/wwwroot/weather.yousb.top/weather.db \
@@ -377,7 +390,7 @@ server {
     error_page 404 /404.html;
 
     # 安全规则必须在 PHP 处理之前
-    location ~* \.(db|db-wal|db-shm|sqlite|sql|md|ini|log)$ {
+    location ~* \.(db|db-wal|db-shm|sqlite|sql|md|ini|log|toml|bak|tmp|lock)$ {
         return 404;
     }
     location = /api { return 404; }
@@ -422,10 +435,10 @@ chmod 750 /www/data/weather
 
 2. 让系统读取新路径，二选一：
 
-**方式 A（最简单）**：编辑 `api/config.php` 的 `DB_FILE` 默认值：
+**方式 A（最简单）**：编辑 `api/config.toml`：
 
-```php
-define('DB_FILE', '/www/data/weather/weather.db');
+```toml
+database_path = "/www/data/weather/weather.db"
 ```
 
 **方式 B（不改代码）**：在宝塔站点配置 `server {}` 中加入：
@@ -434,7 +447,7 @@ define('DB_FILE', '/www/data/weather/weather.db');
 fastcgi_param WEATHER_DB_FILE /www/data/weather/weather.db;
 ```
 
-`api/config.php` 会优先读取 `$_SERVER['WEATHER_DB_FILE']` 或环境变量。
+`WEATHER_DB_FILE` 环境变量优先级高于 `api/config.toml` 的 `database_path`。
 
 3. 如果开启了防跨站（`open_basedir`），需把 `/www/data/weather` 加入允许路径：
 
@@ -489,14 +502,14 @@ https://weather.example.com,https://www.example.com
 
 ### 9.1 升级代码
 
-1. **先备份** `weather.db*` 与当前代码目录；
-2. 上传新代码覆盖，**不要删除或覆盖 `weather.db`**；
+1. **先备份** `weather.db*` 与当前代码目录，并额外备份 `api/config.toml`；
+2. 上传新代码覆盖，**不要删除或覆盖 `weather.db` 与 `api/config.toml`**；
 3. 若开启了 opcache，重启 PHP；
 4. 访问 `api.php?action=ping` 确认 `version` 与预期一致；
-5. 打开后台核对配置（配置保存在数据库，不会因覆盖代码丢失）；
+5. 打开后台核对配置（配置保存在 `api/config.toml`，不会因覆盖代码丢失）；
 6. 测试天气、地图、登录。
 
-当前数据库版本为 `PRAGMA user_version = 1`。未来若发布带表结构变更的版本，请以发版说明为准，升级前务必备份数据库。
+当前数据库版本为 `PRAGMA user_version = 2`。旧版本（user_version=1 且存在 `system_config`）会在首次请求时自动迁移到 `config.toml`；迁移完成后可手动执行 `DROP TABLE IF EXISTS system_config;`。升级前务必备份数据库与配置文件。
 
 ### 9.2 迁移到新服务器
 
@@ -522,6 +535,8 @@ https://weather.example.com,https://www.example.com
 |--------|----------|------|
 | 入口页 | 访问 `/` | 显示入口导航 |
 | API 健康 | `/api.php?action=ping` | `code=0`，版本正确 |
+| 配置文件保护 | `/api/config.toml` | 404（目录级拒绝） |
+| 配置保存/热重载 | 后台修改并保存 | 写入 `api/config.toml`；业务配置即时生效，运行项下次请求生效 |
 | 数据库保护 | `/weather.db` | 404（Nginx 规则或 `.htaccess`） |
 | 内部模块保护 | `/api/config.php`、`/api/db.php` | 404（目录级拒绝） |
 | 管理员登录 | `/admin.html` | 可登录，非管理员账号被拒绝 |
@@ -555,6 +570,9 @@ https://weather.example.com,https://www.example.com
 | 提示“数据库目录不可写” | 属主/权限错误；防篡改 | `chown -R www:www`；关闭网站防篡改 |
 | 提示“数据库为只读” | 防篡改插件、文件系统只读 | 关闭防篡改或加入白名单 |
 | 提示“无法打开数据库文件” | 目录不存在、`open_basedir` 限制、磁盘满 | 检查路径/权限/磁盘；外置库需加入 `open_basedir` |
+| 提示“config.toml 语法错误” | 手写配置格式错误（引号/值类型） | 按提示行修复；或恢复 `api/config.toml.bak` 后重新保存 |
+| 后台保存配置失败 | `api/config.toml` 不可写、目录只读、防篡改 | `chown www:www api/config.toml`；关闭网站防篡改；检查 `api/` 目录写权限 |
+| 修改时区/语言/版本/数据库路径未立即生效 | 请求级配置需要下一次请求 | 刷新页面；数据库路径错误时检查 `database_path` 与目标目录权限 |
 | 登录后立即掉线 | Session 目录不可写；`open_basedir` 不含 Session 路径；域名/HTTPS 不一致 | 检查 `session.save_path` 权限与 `open_basedir`；统一域名与协议 |
 | 天气返回 2001 | Web 服务 Key 未配置 | 后台填写 `amap_web_key` |
 | 天气返回 2002 | 服务器无法访问高德；curl/allow_url_fopen 不可用；SSL 证书问题 | `curl -sI https://restapi.amap.com` 测试；安装 curl 或开启 `allow_url_fopen`；检查出站防火墙 |
@@ -626,8 +644,8 @@ echo "updated: ", $stmt->rowCount(), PHP_EOL;
 5. 收紧限流参数：`guest_rate_limit`、`guest_amap_rate_limit`、`user_rate_limit`；
 6. 关注后台「封禁管理」，对异常 IP / 指纹及时拉黑；
 7. 保持 `display_errors=Off`、`expose_php=Off`；
-8. 数据库文件务必禁止 Web 下载；生产建议外置（第 7.2 节）；
-9. 定期备份数据库与代码，并验证可恢复；
+8. 数据库与 `api/config.toml` 务必禁止 Web 下载；生产建议数据库外置（第 7.2 节）；
+9. 定期备份数据库、`api/config.toml` 与代码，并验证可恢复；
 10. 如仅自己使用后台，可用 Nginx 限制 `/admin.html` 的来源 IP（可选，注意会限制其他管理员）：
 
 ```nginx
@@ -641,10 +659,15 @@ location = /admin.html {
 
 ## 13. 附录
 
-### 13.1 主要配置项（后台「系统配置」可改）
+### 13.1 主要配置项（`api/config.toml`，后台「系统配置」可改）
 
 | 键 | 默认 | 说明 |
 |----|------|------|
+| `site_name` | 天气中心 | 站点名称 |
+| `app_version` | 1.1.0 | 站点版本号（ping 返回） |
+| `timezone` | Asia/Shanghai | 时区（IANA 名称） |
+| `language` | zh-CN | 语言（zh-CN / en-US） |
+| `database_path` | weather.db | SQLite 路径；相对项目根或绝对路径 |
 | `amap_web_key` | 空 | Web 服务 Key（必需） |
 | `amap_web_secret` | 空 | Web 服务安全密钥（开启数字签名时填） |
 | `amap_js_key` | 空 | JS API Key（地图） |
@@ -668,15 +691,18 @@ location = /admin.html {
 | `allow_origin` | 空 | 跨域白名单 |
 | `trust_proxy` | 0 | 是否信任反向代理 |
 
-### 13.2 数据库文件
+### 13.2 数据与配置文件
 
 | 文件 | 说明 |
 |------|------|
-| `weather.db` | SQLite 主库 |
+| `weather.db` | SQLite 主库（用户 / 城市 / 日志 / 缓存） |
 | `weather.db-wal` | WAL 预写日志（未合并时存在） |
 | `weather.db-shm` | 共享内存索引 |
+| `api/config.toml` | 唯一配置源（含高德 Key，备份时需单独保护） |
+| `api/config.toml.bak` | 上次保存的配置备份（运行时生成） |
+| `api/config.toml.lock` | 配置写入文件锁（运行时生成） |
 
-三者需一起备份/迁移。外置部署时路径由 `DB_FILE` / `WEATHER_DB_FILE` 决定。
+数据库三文件需一起备份/迁移；配置迁移时同时备份 `api/config.toml`。数据库路径由 `database_path` / `WEATHER_DB_FILE` 决定。
 
 ### 13.3 常用命令
 
