@@ -314,8 +314,99 @@ function toml_dump(array $config)
     return implode("\n", $lines) . "\n";
 }
 
-/** 原子保存：文件锁 + 临时文件 + rename + 备份 */
-function toml_save_file($path, array $config)
+/** 确保备份目录存在且可写 */
+function toml_backup_ready($backupDir)
+{
+    if (!is_dir($backupDir)) {
+        @mkdir($backupDir, 0755, true);
+    }
+    return is_dir($backupDir) && is_writable($backupDir);
+}
+
+/** 只保留最近 $keep 份备份 */
+function toml_prune_backups($backupDir, $keep)
+{
+    $keep = max(1, (int) $keep);
+    $files = glob($backupDir . '/config-*.toml');
+    if (!is_array($files)) {
+        return;
+    }
+    sort($files);
+    while (count($files) > $keep) {
+        $old = array_shift($files);
+        @unlink($old);
+    }
+}
+
+/** 将配置内容写入带时间戳的备份文件 */
+function toml_backup_content($content, $backupDir, $keep = 20)
+{
+    if (!toml_backup_ready($backupDir)) {
+        return false;
+    }
+    $now = microtime(true);
+    $stamp = date('Ymd-His', (int) $now) . '-' . sprintf('%06d', (int) (($now - floor($now)) * 1000000));
+    $target = $backupDir . '/config-' . $stamp . '.toml';
+    if (is_file($target)) {
+        $target = $backupDir . '/config-' . $stamp . '-' . substr(md5(uniqid('', true)), 0, 4) . '.toml';
+    }
+    if (@file_put_contents($target, $content) === false) {
+        return false;
+    }
+    @chmod($target, 0640);
+    toml_prune_backups($backupDir, $keep);
+    return true;
+}
+
+/** 备份当前配置文件 */
+function toml_backup_copy($source, $backupDir, $keep = 20)
+{
+    if (!is_file($source)) {
+        return false;
+    }
+    $content = @file_get_contents($source);
+    if ($content === false) {
+        return false;
+    }
+    return toml_backup_content($content, $backupDir, $keep);
+}
+
+/**
+ * 外部修改保护：
+ * 每次请求比较 config.toml 与快照，发现手动修改时先把上一版写入备份目录，再更新快照。
+ * 后台保存会由 toml_save_file() 主动备份并更新快照，不会重复备份。
+ */
+function toml_guard_snapshot($path, $snapshot, $backupDir, $keep = 20)
+{
+    if (!is_file($path)) {
+        return;
+    }
+    $current = @file_get_contents($path);
+    if ($current === false) {
+        return;
+    }
+    if (!is_file($snapshot)) {
+        if (@file_put_contents($snapshot, $current) !== false) {
+            @chmod($snapshot, 0640);
+        }
+        return;
+    }
+    $previous = @file_get_contents($snapshot);
+    if ($previous === false) {
+        @file_put_contents($snapshot, $current);
+        return;
+    }
+    if ($previous !== $current) {
+        if (!toml_backup_content($previous, $backupDir, $keep)) {
+            error_log('[config] 自动备份失败，请检查目录写权限：' . $backupDir);
+        }
+        @file_put_contents($snapshot, $current);
+        @chmod($snapshot, 0640);
+    }
+}
+
+/** 原子保存：文件锁 + 临时文件 + rename + 备份 + 快照更新 */
+function toml_save_file($path, array $config, $backupDir = '', $snapshot = '', $keep = 20)
 {
     $dir = dirname($path);
     if (!is_dir($dir) || !is_writable($dir)) {
@@ -332,6 +423,9 @@ function toml_save_file($path, array $config)
     $tmp = $path . '.tmp.' . getmypid();
     try {
         if (is_file($path)) {
+            if ($backupDir !== '') {
+                toml_backup_copy($path, $backupDir, $keep);
+            }
             @copy($path, $path . '.bak');
         }
         $content = toml_dump($config);
@@ -342,6 +436,10 @@ function toml_save_file($path, array $config)
             throw new RuntimeException('无法替换配置文件：' . $path);
         }
         @chmod($path, 0644);
+        if ($snapshot !== '') {
+            @file_put_contents($snapshot, $content);
+            @chmod($snapshot, 0640);
+        }
         clearstatcache(true, $path);
     } finally {
         if (is_file($tmp)) {

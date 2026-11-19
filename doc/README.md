@@ -15,10 +15,10 @@
 | 用户端 | `user.html` | 单页应用：搜索联想、实时天气、预报、地图标注、关注城市、深色模式、自动刷新、注册登录 |
 | 管理后台 | `admin.html` | 单页应用：数据看板、访问日志、账号管理、系统配置、封禁管理、修改管理员密码 |
 | 后端入口 | `api.php` | 所有请求统一路由（`api.php?action=xxx`），负责鉴权、黑名单、限流、日志与统一响应 |
-| 数据存储 | `weather.db`（SQLite）+ `api/config.toml` | 数据库只存用户与业务数据；配置在 TOML，不写死在代码中 |
+| 数据存储 | `weather.db`（SQLite）+ `config.toml` | 数据库只存用户与业务数据；配置在 TOML，不写死在代码中 |
 | 地图/天气 | 高德开放平台 | REST 接口由后端代理；JS API 密钥由后端动态注入 |
 
-安全设计核心：**前端源码与页面中不出现任何高德密钥**，所有密钥只存在于服务端 `api/config.toml`（位于 `/api/` 目录，整体拒绝 Web 访问）。
+安全设计核心：**前端源码与页面中不出现任何高德密钥**，所有密钥只存在于服务端 `config.toml`（位于 `/api/` 目录，整体拒绝 Web 访问）。
 
 ---
 
@@ -37,9 +37,8 @@
 │  └─ amap-js-proxy.php     JS API 安全配置输出 + SDK 动态加载器（密钥运行时注入）
 │
 ├─ api/                     后端模块（禁止 Web 直接访问）
-│  ├─ config.toml           唯一配置源（DB 路径 / 时区 / 语言 / 版本 / 高德 Key / 限流 / 注册开关）
-│  ├─ config.php            从 config.toml 读取 APP_ROOT / API_DIR / DB_FILE / 时区 / 版本
-│  ├─ toml.php              TOML 解析/序列化、原子保存、文件锁、热重载
+│  ├─ config.php            从根目录 config.toml 读取 APP_ROOT / API_DIR / DB_FILE / 时区 / 版本
+│  ├─ toml.php              TOML 解析/序列化、原子保存、文件锁、自动备份、热重载
 │  ├─ helpers.php           统一响应、参数读取、IP/指纹、CORS、HTTP 客户端、日志写入
 │  ├─ db.php                SQLite 连接、自动建表、配置读写、GC
 │  ├─ auth.php              身份识别、黑名单校验、登录/登出封装、登录失败防护
@@ -52,8 +51,9 @@
 │  └─ .htaccess             Apache 下拒绝 Web 直接访问 api/ 目录
 │
 ├─ 数据与部署配置
+│  ├─ config.toml            唯一配置源（DB 路径 / 时区 / 语言 / 版本 / 高德 Key / 限流 / 注册开关）
 │  ├─ schema.sql            完整建表 SQL（SQLite 方言，首次访问自动执行）
-│  ├─ example_config.toml   配置模板（复制为 api/config.toml）
+│  ├─ example_config.toml   配置模板（复制为 config.toml）
 │  ├─ .htaccess             Apache 根目录安全策略（宝塔 Nginx 不生效，含 404 页面）
 │  └─ .user.ini             宝塔/PHP-FPM 用户级配置（已移除旧主机的失效 open_basedir）
 │
@@ -78,7 +78,7 @@
 1. 入口页面与 `api.php`、`amap-js-proxy.php` 留在站点根目录；后端实现模块统一放 `api/`，不新增其他代码目录；
 2. `api/` 目录整体禁止 Web 访问（Nginx `location ^~ /api/` 或 Apache `api/.htaccess`），新增后端模块直接放入 `api/` 即可；
 3. 新增文档统一放 `doc/`，并在同一次改动中同步 `doc/README.md` 与根目录 `mulu.md` 的索引；
-4. 系统配置统一写 `api/config.toml`（不写回代码或数据库）；
+4. 系统配置统一写 `config.toml`（不写回代码或数据库）；
 5. `api/config.php` 中 `APP_ROOT` 指向项目根目录、`API_DIR` 指向 `api/`；`schema.sql` 与 `weather.db` 位于根目录；
 6. `weather.db*` 属于运行时数据，不纳入代码交付，首次访问 `api.php?action=ping` 时自动生成。
 
@@ -89,18 +89,19 @@
 | `index.html` / `user.html` / `admin.html` / `404.html` | 允许 | 静态页面 |
 | `api.php` / `amap-js-proxy.php` | 允许 | 唯一后端对外入口 |
 | `/api/` 整个目录 | 拒绝 | `api/.htaccess`；宝塔需 Nginx 规则 |
+| `config.toml` / `config.toml.bak` / `config.toml.lock` | 拒绝 | 根 `.htaccess`；宝塔需 Nginx 扩展名规则 |
 | `schema.sql` / `weather.db*` / `.user.ini` / `.htaccess` | 拒绝 | 根 `.htaccess`；宝塔需 Nginx 规则 |
 | `README.md` / `mulu.md` / `doc/*.md` | 拒绝 | 同上 |
 
-> 宝塔默认使用 Nginx，`.htaccess` 不生效，必须按 8.4.5 在站点配置中加入 `location ^~ /api/ { return 404; }`。
+> 宝塔默认使用 Nginx，`.htaccess` 不生效，必须按 8.4.5 加入 `location ^~ /api/` 规则，以及 `.toml/.bak/.lock` 扩展名拒绝规则。
 
 ### 2.3 部署文件清单
 
-- **必需（根目录）**：`api.php`、`amap-js-proxy.php`、`index.html`、`user.html`、`admin.html`、`404.html`、`schema.sql`；
-- **必需（api/ 目录）**：`config.php`、`toml.php`、`config.toml`、`helpers.php`、`db.php`、`auth.php`、`rate_limit.php`、`amap.php`、`api_auth.php`、`api_weather.php`、`api_cities.php`、`api_admin.php`；
+- **必需（根目录）**：`api.php`、`amap-js-proxy.php`、`index.html`、`user.html`、`admin.html`、`404.html`、`schema.sql`、`config.toml`；
+- **必需（api/ 目录）**：`config.php`、`toml.php`、`helpers.php`、`db.php`、`auth.php`、`rate_limit.php`、`amap.php`、`api_auth.php`、`api_weather.php`、`api_cities.php`、`api_admin.php`；
 - **按环境需要**：`.htaccess` 与 `api/.htaccess`（Apache）、`.user.ini`（宝塔/PHP-FPM 建议）、Nginx 规则（宝塔/通用 Nginx 必须）；
 - **可选**：`README.md`、`example_config.toml`、`doc/`、`mulu.md`；
-- **不要上传**：`.codeartsdoer/`、`.git/`、`.gitignore`、本地生成的 `weather.db*`（迁移场景除外）。
+- **不要上传**：`.codeartsdoer/`、`.git/`、`.gitignore`、`api/config_backups/`、`api/config.snapshot`、本地生成的 `weather.db*`（迁移场景除外）。
 
 详细步骤见 [DEPLOY.md 4.2](DEPLOY.md#42-上传文件)。
 
@@ -133,7 +134,7 @@
 ### 4.1 数据库用途
 
 数据库只保存**用户与业务数据**（账号、关注城市、访问日志、游客令牌、黑名单、高德缓存与调用统计）。
-系统配置统一存放在 [`api/config.toml`](../api/config.toml)，不再使用 `system_config` 表。
+系统配置统一存放在 [`config.toml`](../config.toml)，不再使用 `system_config` 表。
 
 建表 SQL 全文见根目录 [`schema.sql`](../schema.sql)。首次请求 `api.php` 时自动执行：
 
@@ -158,9 +159,9 @@
 | `amap_cache` | 高德代理结果缓存（`cache_key` 主键、payload JSON、`expires_at`） |
 | `amap_calls` | 高德调用记录（成功率、延迟、缓存命中、错误信息），用于后台看板 |
 
-### 4.4 配置文件（`api/config.toml`）
+### 4.4 配置文件（`config.toml`）
 
-> 首次部署可复制根目录 [example_config.toml](../example_config.toml) 为 `api/config.toml`；模板不含真实 Key。
+> 首次部署可复制根目录 [example_config.toml](../example_config.toml) 为 `config.toml`；模板不含真实 Key。
 
 | 键 | 默认值 | 含义 |
 |----|--------|------|
@@ -191,6 +192,8 @@
 **读写与热重载：**
 
 - `api/toml.php` 负责解析/序列化；保存时使用文件锁 + 临时文件 + `rename` 原子替换，并生成 `config.toml.bak`；
+- 自动备份：保存配置或检测到外部修改时，写入 `api/config_backups/config-时间戳.toml`（保留最近 20 份）；检测快照为 `api/config.snapshot`；
+- 恢复：把 `api/config_backups/` 中需要的备份复制为根目录 `config.toml`；恢复前建议先备份当前文件；
 - `config_all()` 每次调用检查 `config.toml` 的 `mtime/size`，外部修改后自动重载；
 - `timezone`、`language`、`app_version`、`database_path` 属于请求级配置，下一次请求生效；其余业务配置保存后立即生效；
 - 配置目录与文件必须对 PHP 运行用户可写（宝塔为 `www`）。
@@ -252,7 +255,7 @@
 
 前端只调用 `api.php?action=weather|tips|regeo|geocode`，后端 `amap_proxy()`：
 
-1. 从 `api/config.toml`（经 `config_all()`）读取 `amap_web_key` / `amap_web_secret`（未配置返回 2001）；
+1. 从 `config.toml`（经 `config_all()`）读取 `amap_web_key` / `amap_web_secret`（未配置返回 2001）；
 2. 过滤空参数，构造缓存键 `amap:<service>:md5(参数)`；
 3. 命中 `amap_cache` 且未过期则直接返回并记录 `cache-hit`；
 4. 注入 `key`；若配置了安全密钥则按高德规则签名（参数 key 升序 `k=v&...` + secret 取 md5）；
@@ -356,7 +359,7 @@ flowchart TD
 
 ### 7.7 后台配置
 
-`admin_config_save` 按白名单校验字段类型、枚举、数值范围、时区、版本号与数据库路径 → `set_config_many()` 写入 `api/config.toml`（文件锁 + 临时文件 + rename + 自动备份）→ `config_all(true)` 刷新。高德 Key、限流、注册开关等保存后立即生效；`timezone`、`language`、`app_version`、`database_path` 在下一次请求生效。`config_all()` 每次调用检查文件 `mtime/size`，实现外部修改后的热重载。
+`admin_config_save` 按白名单校验字段类型、枚举、数值范围、时区、版本号与数据库路径 → `set_config_many()` 写入 `config.toml`（文件锁 + 临时文件 + rename + 自动备份）→ `config_all(true)` 刷新。高德 Key、限流、注册开关等保存后立即生效；`timezone`、`language`、`app_version`、`database_path` 在下一次请求生效。`config_all()` 每次调用检查文件 `mtime/size`，实现外部修改后的热重载。
 
 ### 7.8 日志与 GC
 
@@ -440,7 +443,8 @@ find /www/wwwroot/weather.yousb.top -type f -exec chmod 644 {} \;
 ```
 
 `weather.db` 由 PHP 进程创建，无需预先建库；若已存在但只读，执行 `chown www:www weather.db*`。
-`api/config.toml` 需要允许 PHP 进程写入（后台保存配置），建议 `chown www:www api/config.toml` 并设置 `644`。
+`config.toml` 需要允许 PHP 进程写入（后台保存配置），建议 `chown www:www config.toml` 并设置 `644`。
+`api/config_backups/` 与 `api/config.snapshot` 由 PHP 自动创建，需确保 `api/` 目录可写（`chown -R` 已覆盖）。
 
 #### 8.4.5 Nginx 安全规则（重点）
 
@@ -459,7 +463,9 @@ location ^~ /api/ { return 404; }
 
 修改后执行 `nginx -t` 校验并重载（宝塔面板可直接点「重载配置」）。
 
-> 可选加固：把数据库移出 Web 根目录。例如创建 `/www/data/weather/`（属主 `www`），在 `api/config.toml` 中把 `database_path` 改为绝对路径，或通过站点配置传入：
+> 根目录 `config.toml` 依赖上述 `.toml` 扩展名规则拒绝访问；请勿删除该规则。
+
+> 可选加固：把数据库移出 Web 根目录。例如创建 `/www/data/weather/`（属主 `www`），在 `config.toml` 中把 `database_path` 改为绝对路径，或通过站点配置传入：
 > `fastcgi_param WEATHER_DB_FILE /www/data/weather/weather.db;`
 > （`WEATHER_DB_FILE` 环境变量优先级高于 `database_path`）。同时确保该目录在 `open_basedir` 范围内。
 
@@ -494,10 +500,11 @@ allow_url_fopen = On
 STAMP=$(date +%F_%H%M)
 mkdir -p /www/backup/weather/$STAMP
 cp -a /www/wwwroot/weather.yousb.top/weather.db* /www/backup/weather/$STAMP/
-cp -a /www/wwwroot/weather.yousb.top/api/config.toml /www/backup/weather/$STAMP/
+cp -a /www/wwwroot/weather.yousb.top/config.toml /www/backup/weather/$STAMP/
+cp -a /www/wwwroot/weather.yousb.top/api/config_backups /www/backup/weather/$STAMP/ 2>/dev/null || true
 ```
 
-建议每天低峰期执行；也可在宝塔「文件」中离线打包 `weather.db`、`weather.db-wal`、`weather.db-shm` 与 `api/config.toml`。宝塔内置的 MySQL 备份不适用于 SQLite。
+建议每天低峰期执行；也可在宝塔「文件」中离线打包 `weather.db`、`weather.db-wal`、`weather.db-shm` 与 `config.toml`。宝塔内置的 MySQL 备份不适用于 SQLite。
 
 #### 8.4.9 常见问题排查
 
@@ -529,7 +536,7 @@ cp -a /www/wwwroot/weather.yousb.top/api/config.toml /www/backup/weather/$STAMP/
 
 | 项目 | 实现 |
 |------|------|
-| 密钥保护 | 高德 Key 仅存 `api/config.toml`（`/api/` 目录整体拒绝访问）；前端通过 `api.php` / `amap-js-proxy.php` 代理，源码无明文 |
+| 密钥保护 | 高德 Key 仅存根目录 `config.toml`（Nginx 拒绝 `.toml`，Apache 由 `.htaccess` 拒绝；自动备份在 `api/config_backups/` 目录级 404 下）；前端通过 `api.php` / `amap-js-proxy.php` 代理，源码无明文 |
 | 密码存储 | `password_hash(PASSWORD_DEFAULT)` / `password_verify()`，禁止明文 |
 | XSS 防护 | 前端所有动态文本经 `esc()` 转义（`& < > " '`），属性值同样转义；不使用 `innerHTML` 拼接未转义数据 |
 | SQL 注入 | 全部使用 PDO 预处理；分页 LIMIT/OFFSET 强制整型拼接 |
@@ -545,7 +552,7 @@ cp -a /www/wwwroot/weather.yousb.top/api/config.toml /www/backup/weather/$STAMP/
 
 ## 10. 运维建议
 
-- **备份**：定期备份 `weather.db` 与 `api/config.toml`（含 WAL 时建议先执行 `PRAGMA wal_checkpoint(TRUNCATE);` 或直接停写后复制三个数据库文件）。
+- **备份**：定期备份 `weather.db` 与 `config.toml`（含 WAL 时建议先执行 `PRAGMA wal_checkpoint(TRUNCATE);` 或直接停写后复制三个数据库文件）。
 - **日志**：后台「访问日志」支持按 IP / 接口 / 用户 / 日期筛选分页；超期自动清理（默认 30 天）。
 - **配额监控**：后台看板展示今日真实调用、缓存命中、成功率与估算剩余配额。
 - **缓存调优**：天气 10 分钟、联想 5 分钟、地理编码 1 天；若高德配额紧张可适当调大 `cache_ttl_*`。
@@ -573,5 +580,5 @@ cp -a /www/wwwroot/weather.yousb.top/api/config.toml /www/backup/weather/$STAMP/
 | v1.0.1 | 2026-11-19 | 宝塔面板（BT Panel）兼容：修复失效 `.user.ini` 的 `open_basedir`；Session Cookie 参数兼容 PHP 7.2+；新增 `pdo_sqlite` 检测与可读错误提示；WAL 初始化容错；支持 `WEATHER_DB_FILE` 将数据库外置；移除 `X-Powered-By`；补充宝塔 Nginx、PHP、权限、防篡改与备份部署文档 |
 | v1.0.2 | 2026-11-19 | 修复直接输入中文城市名时实时天气（lives）为空：天气查询先用地理编码解析 adcode 再请求高德，接口返回解析后的 `adcode` / `city`；前端在无实况时降级展示今日预报温度范围，并保存解析后的 adcode 供自动刷新与关注城市使用；侧栏增加关注城市空状态提示 |
 | v1.0.3 | 2026-11-19 | 后端模块目录化：10 个 PHP 模块移入 `api/`，根目录仅保留 `api.php` 与 `amap-js-proxy.php` 作为入口；`api/config.php` 新增 `API_DIR` 并将 `APP_ROOT` 指向项目根；Nginx/Apache 访问控制改为目录级（`location ^~ /api/`、`api/.htaccess`）；同步更新目录结构、部署清单与文档索引 |
-| v1.0.4 | 2026-11-19 | 配置架构调整：新增 `api/config.toml` 与轻量 TOML 解析器 `api/toml.php`；数据库路径、时区、语言、版本号、高德 Key、限流、注册开关统一写入 TOML，支持 mtime 热重载、文件锁、原子写与自动备份；SQLite 只保留用户与业务数据，旧 `system_config` 自动迁移；后台新增语言/时区/版本/数据库路径字段 |
-| v1.1.0 | 2026-11-20 | 版本号升级至 1.1.0；同步更新 `api/config.toml`、`api/toml.php` 默认值、后台版本字段占位与文档示例（配置架构沿用 v1.0.4） |
+| v1.0.4 | 2026-11-19 | 配置架构调整：新增 `config.toml` 与轻量 TOML 解析器 `api/toml.php`；数据库路径、时区、语言、版本号、高德 Key、限流、注册开关统一写入 TOML，支持 mtime 热重载、文件锁、原子写与自动备份；SQLite 只保留用户与业务数据，旧 `system_config` 自动迁移；后台新增语言/时区/版本/数据库路径字段 |
+| v1.1.0 | 2026-11-20 | 版本号升级至 1.1.0；同步更新 `config.toml`、`api/toml.php` 默认值、后台版本字段占位与文档示例（配置架构沿用 v1.0.4） |

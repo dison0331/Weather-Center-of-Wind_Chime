@@ -1,11 +1,13 @@
 # 运行时数据
 /weather.db*
-/api/config.toml.bak
-/api/config.toml.lock
+config.toml.bak
+config.toml.lock
+/api/config_backups/
+/api/config.snapshot
 
 # 工具与日志
 /.codeartsdoer/
 *.log
 
-# 填写的真实高德 Key，不要提交到 Git
-/api/config.toml
+# 如已填写真实高德 Key，请取消下一行注释
+# config.toml

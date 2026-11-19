@@ -1,9 +1,11 @@
 <?php
 /**
- * config.php —— 从 api/config.toml 读取运行常量与数据库路径
+ * config.php —— 从 config.toml 读取运行常量与数据库路径
  *
- * 配置唯一来源：api/config.toml（可通过 WEATHER_CONFIG_FILE 覆盖路径）。
- * 修改配置文件后下一次请求自动生效；后台保存会写回该文件。
+ * 配置默认位置：项目根目录 config.toml；
+ * 兼容旧部署：若根目录不存在但 api/config.toml 存在，则自动回退读取 api/config.toml。
+ * 可通过 WEATHER_CONFIG_FILE 覆盖路径。
+ * 修改配置文件后下一次请求自动生效；后台保存会写回该文件并自动备份。
  * 数据库只保存用户、关注城市、日志、缓存等业务数据。
  */
 if (!defined('IN_PROJECT')) {
@@ -26,11 +28,22 @@ if (isset($_SERVER['WEATHER_CONFIG_FILE']) && trim((string) $_SERVER['WEATHER_CO
     }
 }
 if ($configFile === '') {
-    $configFile = API_DIR . '/config.toml';
+    $rootConfig = APP_ROOT . '/config.toml';
+    $legacyConfig = API_DIR . '/config.toml';
+    if (is_file($rootConfig)) {
+        $configFile = $rootConfig;
+    } elseif (is_file($legacyConfig)) {
+        $configFile = $legacyConfig;
+    } else {
+        $configFile = $rootConfig;
+    }
 } elseif (!toml_is_absolute_path($configFile)) {
     $configFile = toml_resolve_path($configFile, APP_ROOT);
 }
 define('CONFIG_FILE', $configFile);
+define('CONFIG_BACKUP_DIR', API_DIR . '/config_backups');
+define('CONFIG_SNAPSHOT', API_DIR . '/config.snapshot');
+define('CONFIG_BACKUP_KEEP', 20);
 
 $bootConfig = toml_load_file(CONFIG_FILE);
 define('CONFIG_PARSE_ERROR', toml_last_error());
@@ -66,3 +79,4 @@ if ($weatherDbFile === '') {
 define('DB_FILE', $weatherDbFile);
 
 date_default_timezone_set(APP_TIMEZONE);
+toml_guard_snapshot(CONFIG_FILE, CONFIG_SNAPSHOT, CONFIG_BACKUP_DIR, CONFIG_BACKUP_KEEP);

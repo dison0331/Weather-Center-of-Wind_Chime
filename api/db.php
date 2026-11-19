@@ -164,7 +164,7 @@ function migrate_config_from_system_config()
     }
 
     try {
-        toml_save_file(CONFIG_FILE, array_merge($defaults, $current));
+        toml_save_file(CONFIG_FILE, array_merge($defaults, $current), CONFIG_BACKUP_DIR, CONFIG_SNAPSHOT, CONFIG_BACKUP_KEEP);
     } catch (Throwable $e) {
         error_log('[config] 旧配置迁移写入失败：' . $e->getMessage());
         return false;
@@ -223,7 +223,7 @@ function set_config_many(array $pairs)
     foreach ($pairs as $key => $value) {
         $current[(string) $key] = $value;
     }
-    toml_save_file(CONFIG_FILE, array_merge(toml_default_config(), $current));
+    toml_save_file(CONFIG_FILE, array_merge(toml_default_config(), $current), CONFIG_BACKUP_DIR, CONFIG_SNAPSHOT, CONFIG_BACKUP_KEEP);
     config_all(true);
 }
 

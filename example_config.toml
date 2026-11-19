@@ -1,14 +1,15 @@
 # 天气系统配置模板（example_config.toml）
 #
 # 用法：
-#   1. 复制本文件为 api/config.toml
-#        cp example_config.toml api/config.toml
+#   1. 复制本文件为 config.toml
+#        cp example_config.toml config.toml
 #   2. 填写高德 Key，按需调整限流与缓存
-#   3. 确保 api/config.toml 对 PHP 运行用户（宝塔 www）可写，权限建议 644
+#   3. 确保 config.toml 对 PHP 运行用户（宝塔 www）可写，权限建议 644
 #
 # 注意：
-# - 本文件只是模板，程序实际读取 api/config.toml
-# - 修改 api/config.toml 后下一次请求自动热重载
+# - 本文件只是模板，程序实际读取 config.toml
+# - 修改 config.toml 后下一次请求自动热重载
+# - 保存配置或检测到外部修改时，自动备份到 api/config_backups/（保留最近 20 份），并保留 config.toml.bak
 # - app_version / timezone / language / database_path 属于请求级配置，下一次请求生效
 # - 高德 Key 属于敏感信息，不要提交到公开仓库
 
