@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>天气中心 · 入口</title>
+<link id="siteFavicon" rel="icon" href="favicon.svg">
 <style>
 :root{--bg:#f2f6fc;--panel:#fff;--text:#1b2735;--muted:#6b7c93;--accent:#2f6fed;--shadow:0 18px 50px rgba(31,66,135,.12)}
 *{box-sizing:border-box}
@@ -24,7 +25,7 @@ h1{margin:0 0 6px;font-size:30px;letter-spacing:.5px}
 </head>
 <body>
 <div class="wrap">
-  <h1>天气中心</h1>
+  <h1 id="siteTitle">天气中心</h1>
   <p class="sub">基于高德开放平台的实时天气与预报系统 · PHP + SQLite</p>
   <div class="cards">
     <div class="card">
@@ -34,14 +35,37 @@ h1{margin:0 0 6px;font-size:30px;letter-spacing:.5px}
     </div>
     <div class="card">
       <h3>管理后台</h3>
-      <p>数据看板、访问日志、账号封禁、高德 Key 与限流参数配置、IP / 指纹黑名单。</p>
+      <p>数据看板、访问日志、用户新增/停用/封禁/警告/重置密码、站点图标与验证邮箱、高德 Key 与限流参数配置。</p>
       <a class="ghost" href="admin.html">进入管理后台</a>
     </div>
   </div>
   <div class="foot">
     首次部署：访问 <b>api.php?action=ping</b> 完成建库初始化，默认管理员账号与完整步骤见 <b>doc/README.md</b>。<br>
-    登录后台后请立即修改管理员密码；高德密钥仅保存在服务端 SQLite，前端通过 api.php 与 amap-js-proxy.php 代理访问，源码不含明文 Key。
+    登录后台后请立即修改管理员密码；高德密钥仅保存在服务端 <b>config.toml</b>，前端通过 api.php 与 amap-js-proxy.php 代理访问，源码不含明文 Key。<br>
+    版本：<b id="appVersion">V1.1.0.1021</b>
   </div>
 </div>
+<script>
+(function () {
+  fetch('api.php?action=config_public', { credentials: 'same-origin' })
+    .then(function (response) { return response.json(); })
+    .then(function (json) {
+      if (!json || json.code !== 0) return;
+      var data = json.data || {};
+      if (data.site_name) {
+        document.title = data.site_name + ' · 入口';
+        var title = document.getElementById('siteTitle');
+        if (title) title.textContent = data.site_name;
+      }
+      var icon = document.getElementById('siteFavicon');
+      if (icon) icon.href = data.site_icon || 'favicon.svg';
+      var version = document.getElementById('appVersion');
+      if (version && data.version) {
+        version.textContent = 'V' + String(data.version).replace(/^[Vv]/, '');
+      }
+    })
+    .catch(function () { });
+})();
+</script>
 </body>
 </html>

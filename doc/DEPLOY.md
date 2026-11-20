@@ -1,6 +1,6 @@
 # 天气中心 · 部署文档
 
-> 适用版本：**v1.1.0** ｜ 技术栈：PHP 7.2+（推荐 7.4 / 8.0 / 8.1 / 8.2）+ SQLite + TOML + 高德开放平台
+> 适用版本：**V1.1.0.1021**（四段式：主版本.次版本.修订号.累加更新号） ｜ 技术栈：PHP 7.2+（推荐 7.4 / 8.0 / 8.1 / 8.2）+ SQLite + TOML + 高德开放平台
 >
 > 本文档是可直接照做的部署手册，覆盖 **宝塔面板（推荐）**、**Apache**、**Nginx + PHP-FPM** 三种环境。
 > 架构、模块职责与数据流见 [README.md](README.md)；接口参数见 [API.md](API.md)。
@@ -112,6 +112,7 @@ ls /www/wwwroot/weather.yousb.top
 ```
 api.php  amap-js-proxy.php
 index.html  user.html  admin.html  404.html
+favicon.svg
 schema.sql  config.toml
 ```
 
@@ -134,6 +135,11 @@ api/.htaccess      Apache 下拒绝后端目录直接访问
 
 **可选（不影响运行）：**
 
+```
+example_config.toml  配置模板（首次部署复制为 config.toml）
+VERSION          版本定义文件（1.1.0.1021）
+doc/             交接文档
+mulu.md          目录速查
 ```
 example_config.toml  配置模板（首次部署复制为 config.toml）
 doc/             交接文档
@@ -284,7 +290,7 @@ https://你的域名/api.php?action=ping
   "code": 0,
   "message": "ok",
   "data": {
-    "version": "1.1.0",
+    "version": "1.1.0.1021",
     "time": "2026-11-19 10:00:00",
     "site_name": "天气中心",
     "register_enabled": true
@@ -521,7 +527,7 @@ https://weather.example.com,https://www.example.com
 5. 打开后台核对配置（配置保存在 `config.toml`，不会因覆盖代码丢失）；
 6. 测试天气、地图、登录。
 
-当前数据库版本为 `PRAGMA user_version = 2`。旧版本（user_version=1 且存在 `system_config`）会在首次请求时自动迁移到 `config.toml`；迁移完成后可手动执行 `DROP TABLE IF EXISTS system_config;`。升级前务必备份数据库与配置文件。
+当前数据库版本为 `PRAGMA user_version = 3`。旧版本（1/2）会在首次请求时迁移配置与用户表字段（`email` / `account_state` / `warning` / `warned_at`）；旧 `system_config` 迁移完成后可手动执行 `DROP TABLE IF EXISTS system_config;`。升级前务必备份数据库与配置文件。
 
 ### 9.2 迁移到新服务器
 
@@ -676,7 +682,9 @@ location = /admin.html {
 | 键 | 默认 | 说明 |
 |----|------|------|
 | `site_name` | 天气中心 | 站点名称 |
-| `app_version` | 1.1.0 | 站点版本号（ping 返回） |
+| `site_icon` | favicon.svg | 页面图标（URL、data:image 或相对路径） |
+| `admin_email` | 空 | 管理员验证/联系邮箱（仅保存校验，不发送邮件） |
+| `app_version` | 1.1.0.1021 | 站点版本号（四段式，ping 返回） |
 | `timezone` | Asia/Shanghai | 时区（IANA 名称） |
 | `language` | zh-CN | 语言（zh-CN / en-US） |
 | `database_path` | weather.db | SQLite 路径；相对项目根或绝对路径 |

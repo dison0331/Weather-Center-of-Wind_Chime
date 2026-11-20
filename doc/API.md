@@ -63,7 +63,7 @@ X-RateLimit-Remaining: 59
   "code": 0,
   "message": "ok",
   "data": {
-    "version": "1.1.0",
+    "version": "1.1.0.1021",
     "time": "2026-11-19 10:00:00",
     "site_name": "天气中心",
     "register_enabled": true
@@ -81,12 +81,13 @@ X-RateLimit-Remaining: 59
   "message": "ok",
   "data": {
     "site_name": "天气中心",
+    "site_icon": "favicon.svg",
     "register_enabled": true,
     "default_city": "深圳",
     "language": "zh-CN",
     "auto_refresh": 300,
     "amap_ready": true,
-    "version": "1.1.0",
+    "version": "1.1.0.1021",
     "server_time": "2026-11-19 10:00:00"
   }
 }
@@ -122,6 +123,7 @@ X-RateLimit-Remaining: 59
 |------|------|------|
 | username | 是 | 3-20 位字母、数字、下划线或中文 |
 | password | 是 | 6-72 位 |
+| email | 否 | 验证/联系邮箱，格式校验，可留空 |
 | fingerprint | 否 | 记录到用户表 |
 
 ```json
@@ -442,11 +444,11 @@ X-RateLimit-Remaining: 59
 
 ### 5.4 admin_users
 
-`POST api.php?action=admin_users`，参数 `page`、`size`、`keyword`（用户名或最近 IP 模糊匹配）。
+`POST api.php?action=admin_users`，参数 `page`、`size`、`keyword`（用户名、邮箱或最近 IP 模糊匹配）。
 
-每项包含 `id / username / role / status / last_ip / last_login_at / created_at / city_count`。
+每项包含 `id / username / email / role / status / account_state / warning / warned_at / last_ip / last_login_at / created_at / city_count`。
 
-### 5.5 admin_user_status
+### 5.5 admin_user_status（兼容接口）
 
 `POST api.php?action=admin_user_status`
 
@@ -455,7 +457,53 @@ X-RateLimit-Remaining: 59
 | id | 是 | 目标用户 ID |
 | status | 是 | `0` 封禁，`1` 解封 |
 
-不能封禁当前登录账号，不能封禁最后一个可用管理员。
+不能封禁当前登录账号，不能封禁最后一个可用管理员。新代码建议使用 `admin_user_action`。
+
+### 5.5.1 admin_user_create
+
+`POST api.php?action=admin_user_create`
+
+| 参数 | 必填 | 说明 |
+|------|------|------|
+| username | 是 | 3-20 位字母、数字、下划线或中文 |
+| password | 否 | 6-72 位；留空自动生成 |
+| email | 否 | 验证/联系邮箱，格式校验 |
+
+返回 `id`、`username`、`email`；自动生成密码时额外返回 `generated_password`（只返回一次）。
+
+### 5.5.2 admin_user_action
+
+`POST api.php?action=admin_user_action`
+
+| 参数 | 必填 | 说明 |
+|------|------|------|
+| id | 是 | 目标用户 ID |
+| action | 是 | `enable` 启用/解封、`disable` 停用、`ban` 封禁 |
+
+停用与封禁均会将 `status` 设为 0，并通过 `account_state` 区分（disabled / banned）。
+不能停用或封禁当前登录账号，不能停用或封禁最后一个可用管理员。
+
+### 5.5.3 admin_user_warn
+
+`POST api.php?action=admin_user_warn`
+
+| 参数 | 必填 | 说明 |
+|------|------|------|
+| id | 是 | 目标用户 ID |
+| warning | 否 | 警告内容，最长 200 字；留空清除警告 |
+
+警告会在用户登录后以顶部提示条展示。
+
+### 5.5.4 admin_user_reset_password
+
+`POST api.php?action=admin_user_reset_password`
+
+| 参数 | 必填 | 说明 |
+|------|------|------|
+| id | 是 | 目标用户 ID |
+| password | 否 | 6-72 位；留空自动生成 |
+
+自动生成时返回 `generated_password`（只返回一次）。
 
 ### 5.6 admin_config_get
 
@@ -473,7 +521,9 @@ X-RateLimit-Remaining: 59
 {
   "config": {
     "site_name": "天气中心",
-    "app_version": "1.1.0",
+    "site_icon": "favicon.svg",
+    "admin_email": "",
+    "app_version": "1.1.0.1021",
     "timezone": "Asia/Shanghai",
     "language": "zh-CN",
     "database_path": "weather.db",

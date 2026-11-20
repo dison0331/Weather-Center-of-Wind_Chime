@@ -1,10 +1,12 @@
 # 天气系统配置（TOML）
 # 修改后下一次请求自动生效；也可在管理后台保存。
-# api/ 目录已整体禁止 Web 访问，本文件不会被直接下载。
+# 本文件位于项目根目录，必须由 Nginx/.htaccess 拒绝 .toml 访问。
 
 # ===== 站点与运行 =====
 site_name = "天气中心"
-app_version = "1.1.0"
+site_icon = "favicon.svg"
+app_version = "1.1.0.1021"
+admin_email = ""
 timezone = "Asia/Shanghai"
 language = "zh-CN"
 default_city = "深圳"

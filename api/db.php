@@ -68,7 +68,7 @@ function default_config()
     return toml_default_config();
 }
 
-/** 自动建表 + 旧版配置迁移（PRAGMA user_version 0/1 -> 2） */
+/** 自动建表 + 旧版配置/用户表迁移（PRAGMA user_version 0/1/2 -> 3） */
 function db_init()
 {
     static $done = false;
@@ -90,8 +90,8 @@ function db_init()
         $exists = db_val("SELECT id FROM users WHERE role = 'admin' LIMIT 1");
         if (!$exists) {
             db_exec(
-                'INSERT INTO users (username, password_hash, role, status, created_at) VALUES (?, ?, ?, 1, ?)',
-                ['admin', password_hash('admin123', PASSWORD_DEFAULT), 'admin', $now]
+                'INSERT INTO users (username, password_hash, role, status, account_state, created_at) VALUES (?, ?, ?, 1, ?, ?)',
+                ['admin', password_hash('admin123', PASSWORD_DEFAULT), 'admin', 'active', $now]
             );
         }
     }
@@ -103,7 +103,43 @@ function db_init()
         $pdo->exec('PRAGMA user_version = 2');
     }
 
+    if ($version < 3) {
+        migrate_users_schema();
+        $pdo->exec('PRAGMA user_version = 3');
+    }
+
     $done = true;
+}
+
+/**
+ * 用户表扩展列迁移（v1/v2 -> v3）：
+ * email、account_state、warning、warned_at，并补充历史封禁账号状态。
+ */
+function migrate_users_schema()
+{
+    $pdo = db();
+    $columns = [];
+    foreach (db_all('PRAGMA table_info(users)') as $column) {
+        $columns[$column['name']] = true;
+    }
+    if (!isset($columns['email'])) {
+        $pdo->exec("ALTER TABLE users ADD COLUMN email TEXT DEFAULT ''");
+    }
+    if (!isset($columns['account_state'])) {
+        $pdo->exec("ALTER TABLE users ADD COLUMN account_state TEXT NOT NULL DEFAULT 'active'");
+    }
+    if (!isset($columns['warning'])) {
+        $pdo->exec("ALTER TABLE users ADD COLUMN warning TEXT DEFAULT ''");
+    }
+    if (!isset($columns['warned_at'])) {
+        $pdo->exec("ALTER TABLE users ADD COLUMN warned_at TEXT DEFAULT ''");
+    }
+    $pdo->exec(
+        "UPDATE users
+         SET account_state = CASE WHEN status = 0 THEN 'banned' ELSE 'active' END
+         WHERE account_state IS NULL OR account_state = '' OR (status = 0 AND account_state = 'active')"
+    );
+    $pdo->exec('CREATE INDEX IF NOT EXISTS idx_users_email ON users (email)');
 }
 
 /**

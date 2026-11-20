@@ -19,7 +19,9 @@ function toml_default_config()
 {
     return [
         'site_name'             => '天气中心',
-        'app_version'           => '1.1.0',
+        'site_icon'             => 'favicon.svg',
+        'app_version'           => '1.1.0.1021',
+        'admin_email'           => '',
         'timezone'              => 'Asia/Shanghai',
         'language'              => 'zh-CN',
         'default_city'          => '深圳',
@@ -58,8 +60,9 @@ function toml_config_groups()
 {
     return [
         '站点与运行' => [
-            'site_name', 'app_version', 'timezone', 'language', 'default_city',
-            'auto_refresh', 'allow_origin', 'trust_proxy', 'register_enabled',
+            'site_name', 'site_icon', 'app_version', 'admin_email', 'timezone',
+            'language', 'default_city', 'auto_refresh', 'allow_origin', 'trust_proxy',
+            'register_enabled',
         ],
         '数据库' => ['database_path'],
         '高德开放平台' => [

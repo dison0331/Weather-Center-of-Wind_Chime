@@ -21,6 +21,7 @@ function auth_config_public($identity)
 {
     return [
         'site_name'        => get_config('site_name', '天气中心'),
+        'site_icon'        => get_config('site_icon', 'favicon.svg'),
         'register_enabled' => get_config('register_enabled', '1') === '1',
         'default_city'     => get_config('default_city', '深圳'),
         'language'         => get_config('language', 'zh-CN'),
@@ -70,6 +71,7 @@ function auth_register($identity)
 
     $username = str_param('username');
     $password = (string) param('password', '');
+    $email = trim((string) param('email', ''));
     $fp = client_fingerprint();
 
     if (!valid_username($username)) {
@@ -78,14 +80,30 @@ function auth_register($identity)
     if (strlen($password) < 6 || strlen($password) > 72) {
         fail(1001, '密码长度需为 6-72 位', 400);
     }
+    if ($email !== '' && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        fail(1001, '验证邮箱格式无效', 400);
+    }
     if (db_val('SELECT id FROM users WHERE username = ?', [$username])) {
         fail(1009, '用户名已存在', 409);
+    }
+    if ($email !== '' && db_val('SELECT id FROM users WHERE email = ?', [$email])) {
+        fail(1009, '邮箱已被使用', 409);
     }
 
     try {
         db_exec(
-            'INSERT INTO users (username, password_hash, role, status, fingerprint, last_ip, created_at) VALUES (?, ?, ?, 1, ?, ?, ?)',
-            [$username, password_hash($password, PASSWORD_DEFAULT), 'user', $fp, client_ip(), date('Y-m-d H:i:s')]
+            'INSERT INTO users (username, password_hash, role, status, email, account_state, fingerprint, last_ip, created_at)
+             VALUES (?, ?, ?, 1, ?, ?, ?, ?, ?)',
+            [
+                $username,
+                password_hash($password, PASSWORD_DEFAULT),
+                'user',
+                $email,
+                'active',
+                $fp,
+                client_ip(),
+                date('Y-m-d H:i:s'),
+            ]
         );
     } catch (PDOException $e) {
         fail(1009, '用户名已存在', 409);

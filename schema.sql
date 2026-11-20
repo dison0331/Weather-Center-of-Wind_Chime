@@ -1,8 +1,8 @@
 -- ============================================================
 -- 天气系统 · SQLite 建表脚本（SQLite 3 方言）
--- 首次请求 api.php 时由 db.php 自动执行，PRAGMA user_version = 2
+-- 首次请求 api.php 时由 db.php 自动执行，PRAGMA user_version = 3
 --
--- 配置已迁移到 api/config.toml，数据库只保存用户与业务数据。
+-- 配置已迁移到根目录 config.toml，数据库只保存用户与业务数据。
 -- 旧版本升级时 db.php 会把 system_config 内容自动迁移到 config.toml，
 -- 迁移完成并确认无误后可手动执行：DROP TABLE IF EXISTS system_config;
 -- ============================================================
@@ -13,7 +13,11 @@ CREATE TABLE IF NOT EXISTS users (
     username      TEXT    NOT NULL UNIQUE,
     password_hash TEXT    NOT NULL,
     role          TEXT    NOT NULL DEFAULT 'user' CHECK (role IN ('user', 'admin')),
-    status        INTEGER NOT NULL DEFAULT 1 CHECK (status IN (0, 1)), -- 1 正常 / 0 封禁
+    status        INTEGER NOT NULL DEFAULT 1 CHECK (status IN (0, 1)), -- 1 正常 / 0 停用或封禁（细分状态见 account_state）
+    email         TEXT    DEFAULT '',
+    account_state TEXT    NOT NULL DEFAULT 'active', -- active / disabled / banned
+    warning       TEXT    DEFAULT '',
+    warned_at     TEXT    DEFAULT '',
     fingerprint   TEXT    DEFAULT '',
     last_ip       TEXT    DEFAULT '',
     last_login_at TEXT    DEFAULT '',
@@ -21,6 +25,7 @@ CREATE TABLE IF NOT EXISTS users (
 );
 CREATE INDEX IF NOT EXISTS idx_users_role   ON users (role);
 CREATE INDEX IF NOT EXISTS idx_users_status ON users (status);
+CREATE INDEX IF NOT EXISTS idx_users_email  ON users (email);
 
 -- 2. 关注城市表
 CREATE TABLE IF NOT EXISTS user_cities (

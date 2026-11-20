@@ -152,13 +152,14 @@ function adm_users($identity)
     $where = '';
     $args = [];
     if ($keyword !== '') {
-        $where = ' WHERE u.username LIKE ? OR u.last_ip LIKE ?';
-        $args = ['%' . $keyword . '%', '%' . $keyword . '%'];
+        $where = ' WHERE u.username LIKE ? OR u.last_ip LIKE ? OR u.email LIKE ?';
+        $args = ['%' . $keyword . '%', '%' . $keyword . '%', '%' . $keyword . '%'];
     }
     $total = (int) db_val('SELECT COUNT(*) FROM users u' . $where, $args, 0);
     $offset = ($page - 1) * $size;
     $items = db_all(
-        'SELECT u.id, u.username, u.role, u.status, u.last_ip, u.last_login_at, u.created_at,
+        'SELECT u.id, u.username, u.email, u.role, u.status, u.account_state,
+                u.warning, u.warned_at, u.last_ip, u.last_login_at, u.created_at,
                 (SELECT COUNT(*) FROM user_cities c WHERE c.user_id = u.id) AS city_count
          FROM users u' . $where . ' ORDER BY u.id DESC LIMIT ' . $size . ' OFFSET ' . $offset,
         $args
@@ -172,7 +173,98 @@ function adm_users($identity)
     return ['page' => $page, 'size' => $size, 'total' => $total, 'pages' => (int) ceil($total / $size), 'items' => $items];
 }
 
-/** 封禁 / 解封账号 */
+/** 新增用户（管理员创建，不受注册开关限制） */
+function adm_user_create($identity)
+{
+    $username = str_param('username');
+    $password = (string) param('password', '');
+    $email = trim((string) param('email', ''));
+
+    if (!valid_username($username)) {
+        fail(1001, '用户名需为 3-20 位字母、数字、下划线或中文', 400);
+    }
+    $generated = false;
+    if ($password === '') {
+        $password = random_token(6);
+        $generated = true;
+    }
+    if (strlen($password) < 6 || strlen($password) > 72) {
+        fail(1001, '密码长度需为 6-72 位', 400);
+    }
+    if ($email !== '' && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        fail(1001, '验证邮箱格式无效', 400);
+    }
+    if (db_val('SELECT id FROM users WHERE username = ?', [$username])) {
+        fail(1009, '用户名已存在', 409);
+    }
+    if ($email !== '' && db_val('SELECT id FROM users WHERE email = ?', [$email])) {
+        fail(1009, '邮箱已被使用', 409);
+    }
+
+    try {
+        db_exec(
+            'INSERT INTO users (username, password_hash, role, status, email, account_state, warning, warned_at, fingerprint, last_ip, created_at)
+             VALUES (?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?)',
+            [
+                $username,
+                password_hash($password, PASSWORD_DEFAULT),
+                'user',
+                $email,
+                'active',
+                '',
+                '',
+                '',
+                '',
+                date('Y-m-d H:i:s'),
+            ]
+        );
+    } catch (PDOException $e) {
+        fail(1009, '用户名或邮箱已存在', 409);
+    }
+
+    return [
+        'id'                 => (int) db()->lastInsertId(),
+        'username'           => $username,
+        'email'              => $email,
+        'generated_password' => $generated ? $password : null,
+    ];
+}
+
+/** 停用 / 启用 / 封禁账号 */
+function adm_user_action($identity)
+{
+    $id = int_param('id');
+    $action = str_param('action');
+    $states = ['enable' => 'active', 'disable' => 'disabled', 'ban' => 'banned'];
+    if ($id <= 0 || !isset($states[$action])) {
+        fail(1001, '参数无效', 400);
+    }
+
+    $target = db_one('SELECT id, role, status, account_state FROM users WHERE id = ?', [$id]);
+    if (!$target) {
+        fail(1001, '账号不存在', 404);
+    }
+    if ($id === $identity['user_id'] && $action !== 'enable') {
+        fail(1001, '不能停用或封禁当前登录账号', 400);
+    }
+    if ($action !== 'enable' && $target['role'] === 'admin') {
+        $adminCount = (int) db_val(
+            "SELECT COUNT(*) FROM users WHERE role = 'admin' AND status = 1 AND account_state = 'active'",
+            [],
+            0
+        );
+        if ($adminCount <= 1) {
+            fail(1001, '不能停用或封禁最后一个可用管理员', 400);
+        }
+    }
+
+    $status = $action === 'enable' ? 1 : 0;
+    $state = $states[$action];
+    db_exec('UPDATE users SET status = ?, account_state = ? WHERE id = ?', [$status, $state, $id]);
+    return ['id' => $id, 'status' => $status, 'account_state' => $state];
+}
+
+/** 封禁 / 解封账号（兼容旧接口） */
 function adm_user_status($identity)
 {
     $id = int_param('id');
@@ -188,13 +280,60 @@ function adm_user_status($identity)
         fail(1001, '不能封禁当前登录账号', 400);
     }
     if ($target['role'] === 'admin' && $status === 0) {
-        $adminCount = (int) db_val("SELECT COUNT(*) FROM users WHERE role = 'admin' AND status = 1", [], 0);
+        $adminCount = (int) db_val(
+            "SELECT COUNT(*) FROM users WHERE role = 'admin' AND status = 1 AND account_state = 'active'",
+            [],
+            0
+        );
         if ($adminCount <= 1) {
             fail(1001, '不能封禁最后一个可用管理员', 400);
         }
     }
-    db_exec('UPDATE users SET status = ? WHERE id = ?', [$status, $id]);
-    return ['id' => $id, 'status' => $status];
+    $state = $status === 1 ? 'active' : 'banned';
+    db_exec('UPDATE users SET status = ?, account_state = ? WHERE id = ?', [$status, $state, $id]);
+    return ['id' => $id, 'status' => $status, 'account_state' => $state];
+}
+
+/** 警告 / 清除警告 */
+function adm_user_warn($identity)
+{
+    $id = int_param('id');
+    $warning = trim((string) param('warning', ''));
+    if ($id <= 0) {
+        fail(1001, '缺少用户 ID', 400);
+    }
+    if (!db_val('SELECT id FROM users WHERE id = ?', [$id])) {
+        fail(1001, '账号不存在', 404);
+    }
+    if (text_len($warning) > 200) {
+        $warning = text_cut($warning, 200);
+    }
+    $warnedAt = $warning === '' ? '' : date('Y-m-d H:i:s');
+    db_exec('UPDATE users SET warning = ?, warned_at = ? WHERE id = ?', [$warning, $warnedAt, $id]);
+    return ['id' => $id, 'warning' => $warning, 'warned_at' => $warnedAt];
+}
+
+/** 重置指定用户密码；密码为空时自动生成 */
+function adm_user_reset_password($identity)
+{
+    $id = int_param('id');
+    $password = (string) param('password', '');
+    if ($id <= 0) {
+        fail(1001, '缺少用户 ID', 400);
+    }
+    if (!db_val('SELECT id FROM users WHERE id = ?', [$id])) {
+        fail(1001, '账号不存在', 404);
+    }
+    $generated = false;
+    if ($password === '') {
+        $password = random_token(6);
+        $generated = true;
+    }
+    if (strlen($password) < 6 || strlen($password) > 72) {
+        fail(1001, '新密码长度需为 6-72 位', 400);
+    }
+    db_exec('UPDATE users SET password_hash = ? WHERE id = ?', [password_hash($password, PASSWORD_DEFAULT), $id]);
+    return ['id' => $id, 'generated_password' => $generated ? $password : null];
 }
 
 /** 读取系统配置（config.toml） */
@@ -227,7 +366,9 @@ function adm_config_save($identity)
 
     $stringFields = [
         'site_name'             => 60,
-        'app_version'           => 20,
+        'site_icon'             => 4000,
+        'app_version'           => 30,
+        'admin_email'           => 254,
         'timezone'              => 60,
         'default_city'          => 50,
         'allow_origin'          => 300,
@@ -298,8 +439,17 @@ function adm_config_save($identity)
         fail(1001, '时区无效，请填写 IANA 时区（如 Asia/Shanghai）', 400);
     }
     if (isset($pairs['app_version']) && $pairs['app_version'] !== ''
-        && !preg_match('/^\d{1,3}\.\d{1,3}\.\d{1,3}$/', $pairs['app_version'])) {
-        fail(1001, '版本号格式应为 x.y.z', 400);
+        && !preg_match('/^\d{1,3}\.\d{1,3}\.\d{1,3}(?:\.\d{1,9})?$/', $pairs['app_version'])) {
+        fail(1001, '版本号格式应为 X.Y.Z.N（兼容旧三段 X.Y.Z）', 400);
+    }
+    if (isset($pairs['admin_email']) && $pairs['admin_email'] !== ''
+        && !filter_var($pairs['admin_email'], FILTER_VALIDATE_EMAIL)) {
+        fail(1001, '验证邮箱格式无效', 400);
+    }
+    if (isset($pairs['site_icon']) && $pairs['site_icon'] !== ''
+        && preg_match('/^[a-z][a-z0-9+.\-]*:/i', $pairs['site_icon'])
+        && !preg_match('#^(https?://|data:image/)#i', $pairs['site_icon'])) {
+        fail(1001, '站点图标仅支持 http(s)、data:image 或相对路径', 400);
     }
     if (isset($pairs['database_path']) && $pairs['database_path'] !== '') {
         $target = toml_resolve_path($pairs['database_path'], APP_ROOT);
@@ -431,7 +581,11 @@ return [
     'admin_overview'         => ['auth' => 'admin', 'rate' => false, 'handler' => 'adm_overview'],
     'admin_logs'             => ['auth' => 'admin', 'rate' => false, 'handler' => 'adm_logs'],
     'admin_users'            => ['auth' => 'admin', 'rate' => false, 'handler' => 'adm_users'],
+    'admin_user_create'      => ['auth' => 'admin', 'rate' => false, 'handler' => 'adm_user_create'],
+    'admin_user_action'      => ['auth' => 'admin', 'rate' => false, 'handler' => 'adm_user_action'],
     'admin_user_status'      => ['auth' => 'admin', 'rate' => false, 'handler' => 'adm_user_status'],
+    'admin_user_warn'        => ['auth' => 'admin', 'rate' => false, 'handler' => 'adm_user_warn'],
+    'admin_user_reset_password' => ['auth' => 'admin', 'rate' => false, 'handler' => 'adm_user_reset_password'],
     'admin_config_get'       => ['auth' => 'admin', 'rate' => false, 'handler' => 'adm_config_get'],
     'admin_config_save'      => ['auth' => 'admin', 'rate' => false, 'handler' => 'adm_config_save'],
     'admin_change_password'  => ['auth' => 'admin', 'rate' => false, 'handler' => 'adm_change_password'],

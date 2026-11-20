@@ -10,6 +10,25 @@ if (!defined('IN_PROJECT')) {
  * 解析当前身份
  * 返回：type(user|guest)、role、user_id、user、ip、fingerprint、token
  */
+/** 账号细分状态（active / disabled / banned） */
+function user_account_state(array $user)
+{
+    $state = strtolower(trim((string) ($user['account_state'] ?? '')));
+    if (in_array($state, ['active', 'disabled', 'banned'], true)) {
+        return $state;
+    }
+    return ((int) ($user['status'] ?? 0) === 1) ? 'active' : 'banned';
+}
+
+/** 校验账号是否可登录（status=1 且 state=active） */
+function assert_account_active(array $user)
+{
+    $state = user_account_state($user);
+    if ((int) ($user['status'] ?? 0) !== 1 || $state !== 'active') {
+        fail(1008, $state === 'disabled' ? '账号已被停用' : '账号已被封禁', 403);
+    }
+}
+
 function identify()
 {
     static $identity = null;
@@ -24,9 +43,9 @@ function identify()
     if (!empty($_SESSION['uid'])) {
         $user = db_one('SELECT * FROM users WHERE id = ?', [(int) $_SESSION['uid']]);
         if ($user) {
-            if ((int) $user['status'] !== 1) {
+            if ((int) $user['status'] !== 1 || user_account_state($user) !== 'active') {
                 unset($_SESSION['uid']);
-                fail(1008, '账号已被封禁', 403);
+                assert_account_active($user);
             }
             unset($user['password_hash']);
             $identity = [
@@ -156,9 +175,7 @@ function authenticate($username, $password, $requireAdmin = false)
     if (!$user || !password_verify($password, $user['password_hash'])) {
         fail(1007, '账号或密码错误', 401);
     }
-    if ((int) $user['status'] !== 1) {
-        fail(1008, '账号已被封禁', 403);
-    }
+    assert_account_active($user);
     if ($requireAdmin && $user['role'] !== 'admin') {
         fail(1004, '该账号不是管理员', 403);
     }

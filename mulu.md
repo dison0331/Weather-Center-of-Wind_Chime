@@ -14,7 +14,8 @@
 │  ├─ admin.html              管理后台单页应用
 │  ├─ 404.html                静态 404 页面
 │  ├─ api.php                 统一 API 入口（保留根目录）
-│  └─ amap-js-proxy.php       高德 JS API 密钥代理与 SDK 加载器
+│  ├─ amap-js-proxy.php       高德 JS API 密钥代理与 SDK 加载器
+│  └─ favicon.svg             默认页面图标（后台可配置）
 │
 ├─ api/                       后端模块（禁止 Web 直接访问）
 │  ├─ config.php              从根目录 config.toml 读取 APP_ROOT、API_DIR、DB_FILE、时区、版本
@@ -46,6 +47,7 @@
 │     └─ .snapshot         外部修改检测快照
 │
 ├─ 文档与索引
+│  ├─ VERSION                 当前版本定义（1.1.0.1021，四段式）
 │  ├─ LICENSE                 MIT License
 │  ├─ README.md               项目简要说明（快速开始 / 文档入口）
 │  ├─ CONTRIBUTORS.md         贡献者名单与贡献方式
@@ -83,7 +85,7 @@ location ~* \.(db|db-wal|db-shm|sqlite|sql|md|ini|log|toml|bak|tmp|lock)$ { retu
 
 ## 3. 配置说明
 
-- **唯一配置源**：根目录 `config.toml`，包括数据库路径、时区、语言、版本号、高德 Key、限流参数、注册开关等。
+- **唯一配置源**：根目录 `config.toml`，包括数据库路径、站点名称/图标、管理员验证邮箱、时区、语言、版本号、高德 Key、限流参数、注册开关等。
 - **热重载**：外部修改 `config.toml` 后，下一次请求自动读取；后台保存立即刷新当前进程。
 - **自动备份**：保存配置或检测到外部修改时，写入 `config_backups/config-时间戳.toml`（保留最近 20 份）；检测快照为 `config_backups/.snapshot`。
 - **恢复**：把 `config_backups/` 中需要的备份复制为根目录 `config.toml`。
@@ -98,6 +100,7 @@ location ~* \.(db|db-wal|db-shm|sqlite|sql|md|ini|log|toml|bak|tmp|lock)$ { retu
 ```
 index.html  user.html  admin.html  404.html
 api.php  amap-js-proxy.php
+favicon.svg
 schema.sql  config.toml
 ```
 
@@ -121,6 +124,7 @@ Nginx 规则         宝塔 / 通用 Nginx 必须添加
 ### 可选
 
 ```
+VERSION     当前版本定义（1.1.0.1021）
 LICENSE     MIT License
 CONTRIBUTORS.md  贡献者记录
 README.md   项目简要说明

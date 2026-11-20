@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>天气中心 · 管理后台</title>
+<link id="siteFavicon" rel="icon" href="favicon.svg">
 <meta name="referrer" content="same-origin">
 <style>
 :root{
@@ -27,6 +28,7 @@ a{color:var(--accent);text-decoration:none}
 .login-card{width:min(380px,100%);background:var(--panel);border-radius:18px;padding:30px 28px;box-shadow:0 30px 70px rgba(20,45,95,.16);border:1px solid var(--line)}
 .login-card h1{margin:0 0 4px;font-size:22px}
 .login-card .sub{margin:0 0 20px;font-size:12px;color:var(--muted)}
+.login-version{margin-top:14px;text-align:center;font-size:11px;color:var(--muted)}
 .field{display:block;margin-bottom:13px}
 .field span{display:block;font-size:12px;color:var(--muted);margin-bottom:5px}
 .field input,.field select{width:100%;height:38px;border-radius:9px;border:1px solid var(--line);background:var(--bg);padding:0 11px;outline:none}
@@ -46,6 +48,7 @@ a{color:var(--accent);text-decoration:none}
 .hbtn:hover{background:rgba(255,255,255,.2)}
 .hbtn.plain{border-color:transparent;background:transparent}
 .app-header .who{font-size:13px;opacity:.9}
+.app-header .app-version{font-size:11px;opacity:.72;padding:0 3px;white-space:nowrap}
 
 .admin-layout{display:grid;grid-template-columns:190px minmax(0,1fr);min-height:calc(100vh - 56px)}
 .sidenav{padding:18px 12px;border-right:1px solid var(--line);background:var(--panel)}
@@ -91,6 +94,9 @@ tbody tr:hover{background:var(--soft)}
 .badge.ok{color:var(--ok);border-color:rgba(31,157,97,.4);background:rgba(31,157,97,.08)}
 .badge.bad{color:var(--danger);border-color:rgba(224,83,61,.4);background:rgba(224,83,61,.08)}
 .badge.admin{color:var(--accent);border-color:rgba(47,111,237,.35);background:var(--soft)}
+.badge.warn{color:#a86a00;border-color:rgba(240,180,41,.45);background:rgba(240,180,41,.1)}
+.action-group{display:flex;flex-wrap:wrap;gap:4px;min-width:210px}
+.warn-text{display:inline-block;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:middle}
 
 .filters{display:flex;flex-wrap:wrap;gap:9px;margin-bottom:12px;align-items:flex-end}
 .filters label{display:flex;flex-direction:column;gap:4px;font-size:11px;color:var(--muted)}
@@ -147,13 +153,15 @@ html[data-theme="dark"] .toast{background:#2a3a56}
     </label>
     <div id="loginError" class="form-error"></div>
     <button id="loginSubmit" class="primary" type="submit">登录后台</button>
+    <div class="login-version">版本 <span id="appVersionLogin">V1.1.0.1021</span></div>
   </form>
 </div>
 
 <div id="appView" hidden>
   <header class="app-header">
-    <div class="brand">天气中心<small>管理后台</small></div>
+    <div class="brand"><span id="brandName">天气中心</span><small>管理后台</small></div>
     <div class="spacer"></div>
+    <span id="appVersion" class="app-version">V1.1.0.1021</span>
     <span id="adminWho" class="who"></span>
     <a class="hbtn plain" href="user.html" target="_blank" rel="noopener">用户端</a>
     <button id="themeBtn" class="hbtn plain" title="切换主题">🌙</button>
@@ -239,16 +247,22 @@ html[data-theme="dark"] .toast{background:#2a3a56}
 
       <!-- 账号管理 -->
       <section id="view-users" hidden>
-        <div class="view-head"><h2>账号管理</h2><span class="desc">封禁后该账号的请求会被统一拦截</span></div>
+        <div class="view-head"><h2>账号管理</h2><span class="desc">支持新增、停用/启用、封禁/解封、警告、重置密码</span></div>
         <div class="panel">
+          <form id="userCreate" class="filters">
+            <label>用户名<input name="username" maxlength="20" placeholder="3-20 位"></label>
+            <label>初始密码<input name="password" type="password" maxlength="72" placeholder="留空自动生成"></label>
+            <label>验证邮箱<input name="email" type="email" maxlength="120" placeholder="可选"></label>
+            <button class="btn-s primary-s" type="submit">新增用户</button>
+          </form>
           <form id="userFilter" class="filters">
-            <label>关键词<input name="keyword" maxlength="40" placeholder="用户名或最近 IP"></label>
+            <label>关键词<input name="keyword" maxlength="40" placeholder="用户名、邮箱或最近 IP"></label>
             <button class="btn-s primary-s" type="submit">搜索</button>
             <button class="btn-s" type="button" id="userReset">重置</button>
           </form>
           <div class="table-wrap">
             <table>
-              <thead><tr><th>ID</th><th>用户名</th><th>角色</th><th>状态</th><th>关注城市</th><th>最近 IP</th><th>最近登录</th><th>注册时间</th><th>操作</th></tr></thead>
+              <thead><tr><th>ID</th><th>用户名</th><th>验证邮箱</th><th>角色</th><th>状态</th><th>警告</th><th>关注城市</th><th>最近 IP</th><th>最近登录</th><th>注册时间</th><th>操作</th></tr></thead>
               <tbody id="userBody"></tbody>
             </table>
           </div>
@@ -263,7 +277,7 @@ html[data-theme="dark"] .toast{background:#2a3a56}
 
       <!-- 系统配置 -->
       <section id="view-config" hidden>
-        <div class="view-head"><h2>系统配置</h2><span class="desc">配置写入 api/config.toml，保存后自动热重载；时区/语言/版本/数据库路径下次请求生效</span></div>
+        <div class="view-head"><h2>系统配置</h2><span class="desc">配置写入根目录 config.toml，保存后自动热重载；时区/语言/版本/数据库路径下次请求生效</span></div>
         <form id="configForm" class="panel">
           <div class="cfg-section">高德开放平台</div>
           <div class="cfg-grid">
@@ -305,7 +319,9 @@ html[data-theme="dark"] .toast{background:#2a3a56}
           <div class="cfg-section">站点与功能开关</div>
           <div class="cfg-grid">
             <label class="field"><span>站点名称</span><input data-cfg="site_name" type="text" maxlength="60"></label>
-            <label class="field"><span>站点版本号</span><input data-cfg="app_version" type="text" maxlength="20" placeholder="1.1.0"></label>
+            <label class="field"><span>站点图标（URL / data:image / 相对路径）</span><input data-cfg="site_icon" type="text" maxlength="4000" placeholder="favicon.svg"></label>
+            <label class="field"><span>站点版本号（四段式 X.Y.Z.N）</span><input data-cfg="app_version" type="text" maxlength="30" placeholder="1.1.0.1021"></label>
+            <label class="field"><span>管理员验证邮箱（可选）</span><input data-cfg="admin_email" type="email" maxlength="254" placeholder="admin@example.com"></label>
             <label class="field"><span>默认城市</span><input data-cfg="default_city" type="text" maxlength="50"></label>
             <label class="field"><span>时区（IANA）</span><input data-cfg="timezone" type="text" maxlength="60" placeholder="Asia/Shanghai"></label>
             <label class="field"><span>语言</span><select data-cfg="language"><option value="zh-CN">简体中文</option><option value="en-US">English</option></select></label>
@@ -726,6 +742,35 @@ html[data-theme="dark"] .toast{background:#2a3a56}
   }
 
   // ---------- 账号管理 ----------
+  $('userCreate').addEventListener('submit', async function (event) {
+    event.preventDefault();
+    var form = $('userCreate');
+    var fd = new FormData(form);
+    var payload = {
+      username: String(fd.get('username') || '').trim(),
+      password: String(fd.get('password') || ''),
+      email: String(fd.get('email') || '').trim()
+    };
+    if (!payload.username) { toast('请输入用户名'); return; }
+    var btn = form.querySelector('button[type="submit"]');
+    btn.disabled = true;
+    try {
+      var data = await api('admin_user_create', payload, 'POST');
+      if (data.generated_password) {
+        window.alert('用户已创建：' + data.username + '\n初始密码：' + data.generated_password);
+      } else {
+        toast('用户已创建：' + data.username);
+      }
+      form.reset();
+      state.users.page = 1;
+      loadUsers();
+    } catch (e) {
+      toast(e.message || '创建用户失败');
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
   $('userFilter').addEventListener('submit', function (event) {
     event.preventDefault();
     state.users.keyword = String(new FormData($('userFilter')).get('keyword') || '').trim();
@@ -758,26 +803,45 @@ html[data-theme="dark"] .toast{background:#2a3a56}
 
       var body = $('userBody');
       if (!data.items.length) {
-        body.innerHTML = '<tr><td colspan="9" class="empty-row">没有匹配的账号</td></tr>';
+        body.innerHTML = '<tr><td colspan="11" class="empty-row">没有匹配的账号</td></tr>';
         return;
       }
       var html = '';
       data.items.forEach(function (row) {
         var role = row.role === 'admin' ? '<span class="badge admin">管理员</span>' : '<span class="badge">用户</span>';
-        var status = row.status === 1 ? '<span class="badge ok">正常</span>' : '<span class="badge bad">已封禁</span>';
-        var action = row.status === 1
-          ? '<button class="btn-s danger-s" data-uid="' + esc(row.id) + '" data-status="0" data-name="' + esc(row.username) + '">封禁</button>'
-          : '<button class="btn-s" data-uid="' + esc(row.id) + '" data-status="1" data-name="' + esc(row.username) + '">解封</button>';
+        var stateValue = String(row.account_state || (row.status === 1 ? 'active' : 'banned'));
+        var stateLabel = { active: '正常', disabled: '已停用', banned: '已封禁' }[stateValue] || '正常';
+        var stateClass = stateValue === 'active' ? 'ok' : (stateValue === 'disabled' ? 'warn' : 'bad');
+        var stateBadge = '<span class="badge ' + stateClass + '">' + stateLabel + '</span>';
+        var email = row.email ? esc(row.email) : '-';
+        var warning = row.warning
+          ? '<span class="warn-text" title="' + esc(row.warning) + '">' + esc(row.warning) + '</span>'
+          : '-';
+        var actions = '<div class="action-group">';
+        if (stateValue === 'active') {
+          actions += '<button class="btn-s" data-act="disable" data-uid="' + esc(row.id) + '" data-name="' + esc(row.username) + '">停用</button>';
+          actions += '<button class="btn-s danger-s" data-act="ban" data-uid="' + esc(row.id) + '" data-name="' + esc(row.username) + '">封禁</button>';
+        } else if (stateValue === 'disabled') {
+          actions += '<button class="btn-s" data-act="enable" data-uid="' + esc(row.id) + '" data-name="' + esc(row.username) + '">启用</button>';
+          actions += '<button class="btn-s danger-s" data-act="ban" data-uid="' + esc(row.id) + '" data-name="' + esc(row.username) + '">封禁</button>';
+        } else {
+          actions += '<button class="btn-s" data-act="enable" data-uid="' + esc(row.id) + '" data-name="' + esc(row.username) + '">解封</button>';
+        }
+        actions += '<button class="btn-s" data-act="warn" data-uid="' + esc(row.id) + '" data-name="' + esc(row.username) + '">警告</button>';
+        actions += '<button class="btn-s" data-act="reset" data-uid="' + esc(row.id) + '" data-name="' + esc(row.username) + '">重置密码</button>';
+        actions += '</div>';
         html += '<tr>' +
           '<td class="mono">' + esc(row.id) + '</td>' +
           '<td>' + esc(row.username) + '</td>' +
+          '<td class="mono">' + email + '</td>' +
           '<td>' + role + '</td>' +
-          '<td>' + status + '</td>' +
+          '<td>' + stateBadge + '</td>' +
+          '<td>' + warning + '</td>' +
           '<td class="mono">' + esc(row.city_count) + '</td>' +
           '<td class="mono">' + esc(row.last_ip || '-') + '</td>' +
           '<td class="mono">' + esc(row.last_login_at || '-') + '</td>' +
           '<td class="mono">' + esc(row.created_at) + '</td>' +
-          '<td>' + action + '</td>' +
+          '<td>' + actions + '</td>' +
         '</tr>';
       });
       body.innerHTML = html;
@@ -787,16 +851,43 @@ html[data-theme="dark"] .toast{background:#2a3a56}
   }
 
   $('userBody').addEventListener('click', async function (event) {
-    var btn = event.target.closest('[data-uid]');
+    var btn = event.target.closest('[data-act]');
     if (!btn) return;
     var uid = Number(btn.getAttribute('data-uid'));
-    var status = Number(btn.getAttribute('data-status'));
-    var name = btn.getAttribute('data-name');
-    if (status === 0 && !window.confirm('确认封禁账号「' + name + '」？封禁后该账号将无法继续请求接口。')) return;
+    var name = btn.getAttribute('data-name') || '';
+    var act = btn.getAttribute('data-act');
+    var payload = { id: uid };
+    var confirmMsg = '';
+    if (act === 'disable') confirmMsg = '确认停用账号「' + name + '」？';
+    if (act === 'ban') confirmMsg = '确认封禁账号「' + name + '」？';
+    if (confirmMsg && !window.confirm(confirmMsg)) return;
+    if (act === 'warn') {
+      var warning = window.prompt('警告内容（留空清除警告）', '');
+      if (warning === null) return;
+      payload.warning = warning;
+    }
+    if (act === 'reset') {
+      var password = window.prompt('新密码（留空自动生成）', '');
+      if (password === null) return;
+      payload.password = password;
+    }
     btn.disabled = true;
     try {
-      await api('admin_user_status', { id: uid, status: status }, 'POST');
-      toast(status === 0 ? '已封禁 ' + name : '已解封 ' + name);
+      if (act === 'enable' || act === 'disable' || act === 'ban') {
+        await api('admin_user_action', payload, 'POST');
+        if (act === 'enable') toast('已启用/解封 ' + name);
+        else toast(act === 'disable' ? '已停用 ' + name : '已封禁 ' + name);
+      } else if (act === 'warn') {
+        var warnResult = await api('admin_user_warn', payload, 'POST');
+        toast(warnResult.warning ? '已发送警告' : '已清除警告');
+      } else if (act === 'reset') {
+        var resetResult = await api('admin_user_reset_password', payload, 'POST');
+        if (resetResult.generated_password) {
+          window.alert('已重置密码，新密码：' + resetResult.generated_password);
+        } else {
+          toast('密码已重置');
+        }
+      }
       loadUsers();
     } catch (e) {
       toast(e.message || '操作失败');
@@ -939,6 +1030,29 @@ html[data-theme="dark"] .toast{background:#2a3a56}
     var theme = localStorage.getItem('admin_theme');
     if (!theme) theme = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
     applyTheme(theme);
+
+    try {
+      var site = await api('config_public', {}, 'GET');
+      if (site) {
+        if (site.site_name) {
+          document.title = site.site_name + ' · 管理后台';
+          var brand = $('brandName');
+          if (brand) brand.textContent = site.site_name;
+        }
+        var fav = $('siteFavicon');
+        if (fav) fav.href = site.site_icon || 'favicon.svg';
+        var versionEl = $('appVersion');
+        if (versionEl && site.version) {
+          versionEl.textContent = 'V' + String(site.version).replace(/^[Vv]/, '');
+        }
+        var loginVersionEl = $('appVersionLogin');
+        if (loginVersionEl && site.version) {
+          loginVersionEl.textContent = 'V' + String(site.version).replace(/^[Vv]/, '');
+        }
+      }
+    } catch (e) {
+      // 保留默认品牌与图标
+    }
 
     await refreshMe();
     if (state.me && state.me.type === 'user' && state.me.user && state.me.user.role === 'admin') {

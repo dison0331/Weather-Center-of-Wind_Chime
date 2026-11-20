@@ -1,6 +1,6 @@
 # 天气中心 · 系统设计与交接文档
 
-> 版本：v1.1.0 ｜ 技术栈：原生 HTML/CSS/JS + PHP 7.2+（推荐 7.4/8.x）+ SQLite + TOML ｜ 数据源：高德开放平台
+> 版本：V1.1.0.1021（四段式：主版本.次版本.修订号.累加更新号） ｜ 技术栈：原生 HTML/CSS/JS + PHP 7.2+（推荐 7.4/8.x）+ SQLite + TOML ｜ 数据源：高德开放平台
 >
 > 本文档面向后续开发者与接手人员，涵盖目录结构、模块职责、数据库设计、鉴权限流、调用关系、数据流向、部署与安全注意事项。
 > 根目录 [README.md](../README.md) 提供简要说明与快速开始。
@@ -13,7 +13,7 @@
 | 层级 | 实现 | 说明 |
 |------|------|------|
 | 用户端 | `user.html` | 单页应用：搜索联想、实时天气、预报、地图标注、关注城市、深色模式、自动刷新、注册登录 |
-| 管理后台 | `admin.html` | 单页应用：数据看板、访问日志、账号管理、系统配置、封禁管理、修改管理员密码 |
+| 管理后台 | `admin.html` | 单页应用：数据看板、访问日志、用户新增/停用/封禁/警告/重置密码、站点图标与验证邮箱、系统配置、黑名单、修改管理员密码 |
 | 后端入口 | `api.php` | 所有请求统一路由（`api.php?action=xxx`），负责鉴权、黑名单、限流、日志与统一响应 |
 | 数据存储 | `weather.db`（SQLite）+ `config.toml` | 数据库只存用户与业务数据；配置在 TOML，不写死在代码中 |
 | 地图/天气 | 高德开放平台 | REST 接口由后端代理；JS API 密钥由后端动态注入 |
@@ -34,7 +34,8 @@
 │  ├─ admin.html            管理后台单页应用
 │  ├─ 404.html              静态 404 页面
 │  ├─ api.php               统一入口：CORS → Session → 身份识别 → 黑名单 → 鉴权 → 限流 → 路由 → 日志 → 统一 JSON（保留在根目录）
-│  └─ amap-js-proxy.php     JS API 安全配置输出 + SDK 动态加载器（密钥运行时注入）
+│  ├─ amap-js-proxy.php     JS API 安全配置输出 + SDK 动态加载器（密钥运行时注入）
+│  └─ favicon.svg           默认页面图标（后台 site_icon 可覆盖）
 │
 ├─ api/                     后端模块（禁止 Web 直接访问）
 │  ├─ config.php            从根目录 config.toml 读取 APP_ROOT / API_DIR / DB_FILE / 时区 / 版本
@@ -63,6 +64,7 @@
 │  └─ weather.db-shm        共享内存索引
 │
 ├─ 文档与索引
+│  ├─ VERSION              当前版本定义（1.1.0.1021，四段式）
 │  ├─ LICENSE               MIT License
 │  ├─ README.md             项目简要说明（快速开始 / 文档入口）
 │  ├─ CONTRIBUTORS.md       贡献者名单与贡献方式
@@ -99,10 +101,10 @@
 
 ### 2.3 部署文件清单
 
-- **必需（根目录）**：`api.php`、`amap-js-proxy.php`、`index.html`、`user.html`、`admin.html`、`404.html`、`schema.sql`、`config.toml`；
+- **必需（根目录）**：`api.php`、`amap-js-proxy.php`、`index.html`、`user.html`、`admin.html`、`404.html`、`favicon.svg`、`schema.sql`、`config.toml`；
 - **必需（api/ 目录）**：`config.php`、`toml.php`、`helpers.php`、`db.php`、`auth.php`、`rate_limit.php`、`amap.php`、`api_auth.php`、`api_weather.php`、`api_cities.php`、`api_admin.php`；
 - **按环境需要**：`.htaccess` 与 `api/.htaccess`（Apache）、`.user.ini`（宝塔/PHP-FPM 建议）、Nginx 规则（宝塔/通用 Nginx 必须）；
-- **可选**：`LICENSE`、`README.md`、`CONTRIBUTORS.md`、`example_config.toml`、`doc/`、`mulu.md`；
+- **可选**：`LICENSE`、`README.md`、`CONTRIBUTORS.md`、`VERSION`、`example_config.toml`、`doc/`、`mulu.md`；
 - **不要上传**：`.codeartsdoer/`、`.git/`、`.gitignore`、`config_backups/`、`config_backups/.snapshot`、本地生成的 `weather.db*`（迁移场景除外）。
 
 详细步骤见 [DEPLOY.md 4.2](DEPLOY.md#42-上传文件)。
@@ -140,15 +142,15 @@
 
 建表 SQL 全文见根目录 [`schema.sql`](../schema.sql)。首次请求 `api.php` 时自动执行：
 
-- 新库：`PRAGMA user_version` 0 → 1（建表）→ 2；
-- 旧库（user_version=1 且存在 `system_config`）：自动把旧配置补入 `config.toml`，完成后升级到 2；
+- 新库：`PRAGMA user_version` 0 → 1（建表）→ 2（配置迁移）→ 3（用户字段迁移）；
+- 旧库：自动补配置并升级用户表字段（`email` / `account_state` / `warning` / `warned_at`），最终版本 3；
 - 迁移完成并确认无误后，可手动执行 `DROP TABLE IF EXISTS system_config;`。
 
 ### 4.2 核心数据表
 
 | 表 | 关键字段 | 说明 |
 |----|----------|------|
-| `users` | `id, username(UNIQUE), password_hash, role(user/admin), status(1/0), fingerprint, last_ip, last_login_at, created_at` | 账号表；密码使用 `password_hash()` 存储；`status=0` 为封禁 |
+| `users` | `id, username(UNIQUE), password_hash, role(user/admin), status(1/0), email, account_state, warning, warned_at, fingerprint, last_ip, last_login_at, created_at` | 账号表；`status=0` 表示停用或封禁，细分状态见 `account_state`（active/disabled/banned） |
 | `user_cities` | `id, user_id, adcode, city_name, sort_order, created_at`，`UNIQUE(user_id, city_name)` | 关注城市；`sort_order` 用于排序权重 |
 | `access_logs` | `id, created_at, ts, ip, fingerprint, user_id, action, method, status, code, elapsed_ms, ua` | 访问日志；限流统计、看板趋势、后台日志均基于此表 |
 
@@ -168,7 +170,9 @@
 | 键 | 默认值 | 含义 |
 |----|--------|------|
 | `site_name` | 天气中心 | 站点名称 |
-| `app_version` | 1.1.0 | 站点版本号；`ping` 返回该值 |
+| `site_icon` | favicon.svg | 页面图标（URL、data:image 或相对路径） |
+| `admin_email` | 空 | 管理员验证/联系邮箱；仅保存与格式校验，不包含 SMTP 发信 |
+| `app_version` | 1.1.0.1021 | 站点版本号（四段式）；`ping` 返回该值 |
 | `timezone` | Asia/Shanghai | PHP 时区（IANA 名称） |
 | `language` | zh-CN | 站点语言（`zh-CN` / `en-US`） |
 | `default_city` | 深圳 | 用户端默认城市 |
@@ -575,6 +579,7 @@ cp -a /www/wwwroot/weather.yousb.top/config_backups /www/backup/weather/$STAMP/ 
 4. **SQLite 并发写**：已启用 WAL 与 5 秒 busy_timeout，适合中小流量；高并发场景建议迁移 MySQL。
 5. **`regeo` / `cities_reorder` / `ping`** 为预留接口，前端暂未使用；可在后续版本扩展定位按钮与拖拽排序。
 6. **JS API Key 运行时可见**：由高德 JS API 机制决定，建议配置域名白名单与安全密钥。
+7. **验证邮箱未接入 SMTP**：当前仅保存并校验管理员/用户邮箱，不发送验证码或通知；如需发信需另行配置邮件服务。
 
 ---
 
@@ -592,7 +597,24 @@ cp -a /www/wwwroot/weather.yousb.top/config_backups /www/backup/weather/$STAMP/ 
 - 高德服务有额度、计费、测绘合规限制，本作者不对高德 API 可用性、数据准确性承担任何责任；
 - 本项目不包含高德地图 SDK 源码；地图数据、服务及相关商标归高德所有，本项目与高德无隶属或代理关系。
 
-## 13. 变更记录
+## 13. 版本号规范
+
+本项目统一采用四段式版本号 **VX.X.Y.Z**；配置文件与接口返回使用纯数字 `X.X.Y.Z`。
+
+| 段 | 名称 | 含义 |
+|----|------|------|
+| X | 主版本号 | 不兼容的重大变更或大的功能分段 |
+| X | 次版本号 | 向下兼容的功能更新 |
+| Y | 修订号 | 小版本更新 |
+| Z | 累加更新号 | 每次构建或发布递增的累计序号 |
+
+- 当前版本：`V1.1.0.1021`（存储与接口：`1.1.0.1021`）
+- 版本定义文件：根目录 `VERSION`
+- 对外展示：README、doc 文档、管理后台页头与登录页、用户端状态栏、入口页、`ping` / `config_public`
+- 兼容策略：后台允许保存旧三段值 `X.Y.Z`，新填写值使用四段；历史变更记录保留原始格式
+- 本项目当前没有程序集、安装包或发布标签构建流程；后续如增加，必须沿用该四段式
+
+## 14. 变更记录
 
 | 版本 | 日期 | 说明 |
 |------|------|------|
@@ -601,4 +623,5 @@ cp -a /www/wwwroot/weather.yousb.top/config_backups /www/backup/weather/$STAMP/ 
 | v1.0.2 | 2026-11-19 | 修复直接输入中文城市名时实时天气（lives）为空：天气查询先用地理编码解析 adcode 再请求高德，接口返回解析后的 `adcode` / `city`；前端在无实况时降级展示今日预报温度范围，并保存解析后的 adcode 供自动刷新与关注城市使用；侧栏增加关注城市空状态提示 |
 | v1.0.3 | 2026-11-19 | 后端模块目录化：10 个 PHP 模块移入 `api/`，根目录仅保留 `api.php` 与 `amap-js-proxy.php` 作为入口；`api/config.php` 新增 `API_DIR` 并将 `APP_ROOT` 指向项目根；Nginx/Apache 访问控制改为目录级（`location ^~ /api/`、`api/.htaccess`）；同步更新目录结构、部署清单与文档索引 |
 | v1.0.4 | 2026-11-19 | 配置架构调整：新增 `config.toml` 与轻量 TOML 解析器 `api/toml.php`；数据库路径、时区、语言、版本号、高德 Key、限流、注册开关统一写入 TOML，支持 mtime 热重载、文件锁、原子写与自动备份；SQLite 只保留用户与业务数据，旧 `system_config` 自动迁移；后台新增语言/时区/版本/数据库路径字段 |
-| v1.1.0 | 2026-11-20 | 版本号升级至 1.1.0；同步更新 `config.toml`、`api/toml.php` 默认值、后台版本字段占位与文档示例（配置架构沿用 v1.0.4） |
+| v1.1.0 | 2026-11-20 | 版本号升级至 1.1.0；配置架构沿用 v1.0.4；新增后台验证邮箱配置、站点图标/名称动态化、用户创建/停用/封禁/警告/重置密码、用户邮箱与账号细分状态（数据库 user_version 3） |
+| v1.1.0.1021 | 2026-11-20 | 版本号统一为四段式 V1.1.0.1021；新增根目录 `VERSION` 定义文件与各页面版本展示；后台版本校验兼容旧三段值，新值使用四段 |
