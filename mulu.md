@@ -89,10 +89,11 @@ location ~* \.(db|db-wal|db-shm|sqlite|sql|md|ini|log|toml|bak|tmp|lock)$ { retu
 
 ## 3. 配置说明
 
-- **唯一配置源**：根目录 `config.toml`，包括数据库路径、站点名称/图标、管理员验证邮箱、时区、语言、版本号、在线更新清单地址（`update_manifest_url`）、高德 Key、限流参数、注册开关等。
+- **唯一配置源**：根目录 `config.toml`，包括数据库路径、站点名称/图标、用户端地图显示开关（`show_map`）、管理员验证邮箱、时区、语言、版本号、在线更新清单地址（`update_manifest_url`）、高德 Key、限流参数、注册开关等。
 - **热重载**：外部修改 `config.toml` 后，下一次请求自动读取；后台保存立即刷新当前进程。
 - **自动备份**：保存配置或检测到外部修改时，写入 `config_backups/config-时间戳.toml`（保留最近 20 份）；检测快照为 `config_backups/.snapshot`。
 - **恢复**：把 `config_backups/` 中需要的备份复制为根目录 `config.toml`。
+- **缺失键**：升级后如新版本新增配置项，系统配置页会提示并支持「一键补键」，只补默认值、不覆盖已有配置。
 - **请求级配置**：`timezone`、`language`、`app_version`、`database_path` 在下一次请求生效；其余业务配置保存后立即生效。
 - **数据库用途**：SQLite 只保存用户、关注城市、访问日志、游客令牌、黑名单、高德缓存与调用统计；不再保存系统配置。
 - **旧版本迁移**：首次请求会把旧 `system_config` 表内容自动补入 `config.toml`，完成后可手动执行 `DROP TABLE IF EXISTS system_config;`。

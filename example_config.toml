@@ -16,6 +16,7 @@
 # ===== 站点与运行 =====
 site_name = "天气中心"
 site_icon = "favicon.svg"           # 页面图标：URL、data:image/... 或相对路径
+show_map = true                     # 用户端是否显示地图（关闭后不再加载高德 JS SDK）
 app_version = "1.1.0.1021"           # 四段式：主版本.次版本.修订号.累加更新号
 admin_email = ""                    # 管理员验证/联系邮箱（可选）
 timezone = "Asia/Shanghai"          # IANA 时区，例如 Asia/Shanghai

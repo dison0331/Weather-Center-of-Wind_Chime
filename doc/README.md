@@ -174,6 +174,7 @@
 |----|--------|------|
 | `site_name` | 天气中心 | 站点名称 |
 | `site_icon` | favicon.svg | 页面图标（URL、data:image 或相对路径） |
+| `show_map` | true | 用户端是否显示地图；关闭后不加载高德 JS SDK |
 | `admin_email` | 空 | 管理员验证/联系邮箱；仅保存与格式校验，不包含 SMTP 发信 |
 | `app_version` | 1.1.0.1021 | 站点版本号（四段式）；`ping` 返回该值 |
 | `update_manifest_url` | 空 | 在线更新清单 HTTPS JSON 地址；空表示关闭在线更新 |
@@ -206,6 +207,7 @@
 - 恢复：把 `config_backups/` 中需要的备份复制为根目录 `config.toml`；恢复前建议先备份当前文件；
 - `config_all()` 每次调用检查 `config.toml` 的 `mtime/size`，外部修改后自动重载；
 - `timezone`、`language`、`app_version`、`database_path` 属于请求级配置，下一次请求生效；其余业务配置保存后立即生效；
+- 缺失键检测：配置页对比 `config.toml` 实际键与默认键，缺失时显示「一键补键」；补键只写入默认值、不覆盖已有配置，写入前自动备份；
 - 配置目录与文件必须对 PHP 运行用户可写（宝塔为 `www`）。
 
 > `db_gc()` 以约 2% 的请求概率触发，清理过期缓存、过期令牌、超期日志与调用记录，避免表无限增长。
@@ -281,7 +283,7 @@
 <script src="amap-js-proxy.php"></script>
 ```
 
-该文件从数据库读取 JS Key 与安全密钥，输出：
+该文件从 `config.toml` 读取 JS Key 与安全密钥，输出：
 
 ```js
 window._AMapSecurityConfig = { securityJsCode: "..." };
@@ -289,6 +291,8 @@ window.__AMAP_READY = new Promise(...动态创建 <script src="https://webapi.am
 ```
 
 页面 HTML/JS 源码中没有任何 key 字面量。前端通过 `await window.__AMAP_READY` 获取 `AMap` 后初始化地图。若未配置 Key，Promise reject，页面显示占位提示，天气功能不受影响。
+
+后台「系统配置 → 用户端显示地图」关闭后（`show_map = false`），代理直接返回 `Promise.resolve(null)`，不再请求高德 JS SDK；用户端隐藏地图面板，天气查询与关注城市功能不受影响。
 
 > 注意：JS API 的 Key 最终必须由浏览器携带，运行时在开发者工具网络面板可见，这是高德 JS API 的固有机制。代码层面已做到"源码不暴露"，并建议在高德控制台配置域名白名单进一步限制。
 
@@ -645,3 +649,5 @@ cp -a /www/wwwroot/weather.yousb.top/config_backups /www/backup/weather/$STAMP/ 
 | v1.1.0 | 2026-11-20 | 版本号升级至 1.1.0；配置架构沿用 v1.0.4；新增后台验证邮箱配置、站点图标/名称动态化、用户创建/停用/封禁/警告/重置密码、用户邮箱与账号细分状态（数据库 user_version 3） |
 | v1.1.0.1021 | 2026-11-20 | 版本号统一为四段式 V1.1.0.1021；新增根目录 `VERSION` 定义文件与各页面版本展示；后台版本校验兼容旧三段值，新值使用四段 |
 | 未发布 | 2026-11-20 | 新增管理后台在线更新：版本号旁「详情」面板、检查更新、全量备份后更新、失败自动回退与手动回退；新增配置 `update_manifest_url`、模块 `api/api_update.php` 与运行时目录 `update_backups/` |
+| 未发布 | 2026-11-20 | 用户端地图改为后台可选项：新增配置 `show_map`（默认开启），关闭后不加载高德 JS SDK 并隐藏地图面板；账号管理对当前登录账号隐藏停用/封禁操作，后端自锁判断统一按整型比较 |
+| 未发布 | 2026-11-20 | 系统配置新增缺失键检测与「一键补键」（`admin_config_fill`）：升级后自动识别新版本新增的默认配置键，按默认值补入且不覆盖已有配置，写入前自动备份 |

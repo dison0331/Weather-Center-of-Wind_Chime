@@ -20,6 +20,7 @@ function toml_default_config()
     return [
         'site_name'             => '天气中心',
         'site_icon'             => 'favicon.svg',
+        'show_map'              => '1',
         'app_version'           => '1.1.0.1021',
         'admin_email'           => '',
         'update_manifest_url'   => '',
@@ -61,7 +62,7 @@ function toml_config_groups()
 {
     return [
         '站点与运行' => [
-            'site_name', 'site_icon', 'app_version', 'admin_email', 'timezone',
+            'site_name', 'site_icon', 'show_map', 'app_version', 'admin_email', 'timezone',
             'language', 'default_city', 'auto_refresh', 'allow_origin', 'trust_proxy',
             'register_enabled',
         ],
@@ -85,7 +86,7 @@ function toml_config_groups()
 /** 布尔型配置键 */
 function toml_bool_keys()
 {
-    return ['trust_proxy', 'register_enabled'];
+    return ['trust_proxy', 'register_enabled', 'show_map'];
 }
 
 /** 整数型配置键 */

@@ -530,7 +530,7 @@ https://weather.example.com,https://www.example.com
 5. 打开后台核对配置（配置保存在 `config.toml`，不会因覆盖代码丢失）；
 6. 测试天气、地图、登录。
 
-**在线更新（可选）：** 后台页头版本号旁「详情」→「检查更新」→「立即更新」。系统会先备份代码、`config.toml` 与数据库到 `update_backups/`，下载并校验 HTTPS 更新包，替换代码后请求 `api.php?action=ping`；失败自动回退，成功后可用「回退到上一版本」恢复。要求 PHP `zip` 扩展，`update_backups/` 对 `www` 可写；更新源在「系统配置 → 更新与维护」填写 `update_manifest_url`。
+**在线更新（可选）：** 后台页头版本号旁「详情」→「检查更新」→「立即更新」。系统会先备份代码、`config.toml` 与数据库到 `update_backups/`，下载并校验 HTTPS 更新包，替换代码后请求 `api.php?action=ping`；失败自动回退，成功后可用「回退到上一版本」恢复。要求 PHP `zip` 扩展，`update_backups/` 对 `www` 可写；更新源在「系统配置 → 更新与维护」填写 `update_manifest_url`。更新完成后若新版本新增了配置项，系统配置页会提示缺失键，点击「一键补键」按默认值补入即可（不覆盖已有配置）。
 
 当前数据库版本为 `PRAGMA user_version = 3`。旧版本（1/2）会在首次请求时迁移配置与用户表字段（`email` / `account_state` / `warning` / `warned_at`）；旧 `system_config` 迁移完成后可手动执行 `DROP TABLE IF EXISTS system_config;`。升级前务必备份数据库与配置文件。
 
@@ -688,6 +688,7 @@ location = /admin.html {
 |----|------|------|
 | `site_name` | 天气中心 | 站点名称 |
 | `site_icon` | favicon.svg | 页面图标（URL、data:image 或相对路径） |
+| `show_map` | true | 用户端是否显示地图（关闭后不加载高德 JS SDK） |
 | `admin_email` | 空 | 管理员验证/联系邮箱（仅保存校验，不发送邮件） |
 | `app_version` | 1.1.0.1021 | 站点版本号（四段式，ping 返回） |
 | `timezone` | Asia/Shanghai | 时区（IANA 名称） |

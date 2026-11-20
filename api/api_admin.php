@@ -244,7 +244,7 @@ function adm_user_action($identity)
     if (!$target) {
         fail(1001, '账号不存在', 404);
     }
-    if ($id === $identity['user_id'] && $action !== 'enable') {
+    if ($id === (int) $identity['user_id'] && $action !== 'enable') {
         fail(1001, '不能停用或封禁当前登录账号', 400);
     }
     if ($action !== 'enable' && $target['role'] === 'admin') {
@@ -276,7 +276,7 @@ function adm_user_status($identity)
     if (!$target) {
         fail(1001, '账号不存在', 404);
     }
-    if ($id === $identity['user_id'] && $status === 0) {
+    if ($id === (int) $identity['user_id'] && $status === 0) {
         fail(1001, '不能封禁当前登录账号', 400);
     }
     if ($target['role'] === 'admin' && $status === 0) {
@@ -336,6 +336,27 @@ function adm_user_reset_password($identity)
     return ['id' => $id, 'generated_password' => $generated ? $password : null];
 }
 
+/** 配置文件中缺失的默认键（按默认配置顺序） */
+function adm_config_missing_keys()
+{
+    $raw = @file_get_contents(CONFIG_FILE);
+    if ($raw === false) {
+        return [];
+    }
+    try {
+        $keys = array_keys(toml_parse($raw));
+    } catch (Throwable $e) {
+        return [];
+    }
+    $missing = [];
+    foreach (array_keys(default_config()) as $key) {
+        if (!in_array($key, $keys, true)) {
+            $missing[] = $key;
+        }
+    }
+    return $missing;
+}
+
 /** 读取系统配置（config.toml） */
 function adm_config_get($identity)
 {
@@ -346,7 +367,48 @@ function adm_config_get($identity)
     }
     $mtime = @filemtime(CONFIG_FILE);
     $result['updated_at'] = $mtime ? date('Y-m-d H:i:s', $mtime) : '';
-    return ['config' => $result, 'file' => basename(CONFIG_FILE)];
+    return ['config' => $result, 'file' => basename(CONFIG_FILE), 'missing' => adm_config_missing_keys()];
+}
+
+/** 一键补齐缺失的配置键（仅补默认键，不覆盖已有值） */
+function adm_config_fill($identity)
+{
+    if (defined('CONFIG_PARSE_ERROR') && CONFIG_PARSE_ERROR !== '') {
+        fail(1001, 'config.toml 存在语法错误，请先修复文件：' . CONFIG_PARSE_ERROR, 400);
+    }
+    if (!is_file(CONFIG_FILE) || !is_readable(CONFIG_FILE)) {
+        fail(1001, '配置文件不存在或不可读：' . CONFIG_FILE, 400);
+    }
+    $missingKeys = adm_config_missing_keys();
+    if (empty($missingKeys)) {
+        return [
+            'filled' => [],
+            'count'  => 0,
+            'config' => adm_config_get($identity)['config'],
+            'file'   => basename(CONFIG_FILE),
+        ];
+    }
+
+    $defaults = default_config();
+    $pairs = [];
+    foreach ($missingKeys as $key) {
+        if (array_key_exists($key, $defaults)) {
+            $pairs[$key] = $defaults[$key];
+        }
+    }
+    try {
+        set_config_many($pairs);
+    } catch (Throwable $e) {
+        error_log('[config] 补键失败：' . $e->getMessage());
+        fail(5000, '补键失败：' . $e->getMessage(), 500);
+    }
+
+    return [
+        'filled' => array_keys($pairs),
+        'count'  => count($pairs),
+        'config' => adm_config_get($identity)['config'],
+        'file'   => basename(CONFIG_FILE),
+    ];
 }
 
 /** 保存系统配置（写入 config.toml，支持热重载） */
@@ -381,6 +443,7 @@ function adm_config_save($identity)
     ];
     $enumFields = [
         'register_enabled' => ['0', '1'],
+        'show_map'         => ['0', '1'],
         'trust_proxy'      => ['0', '1'],
         'language'         => ['zh-CN', 'en-US'],
     ];
@@ -593,6 +656,7 @@ return [
     'admin_user_reset_password' => ['auth' => 'admin', 'rate' => false, 'handler' => 'adm_user_reset_password'],
     'admin_config_get'       => ['auth' => 'admin', 'rate' => false, 'handler' => 'adm_config_get'],
     'admin_config_save'      => ['auth' => 'admin', 'rate' => false, 'handler' => 'adm_config_save'],
+    'admin_config_fill'      => ['auth' => 'admin', 'rate' => false, 'handler' => 'adm_config_fill'],
     'admin_change_password'  => ['auth' => 'admin', 'rate' => false, 'handler' => 'adm_change_password'],
     'admin_blacklist_list'   => ['auth' => 'admin', 'rate' => false, 'handler' => 'adm_blacklist_list'],
     'admin_blacklist_add'    => ['auth' => 'admin', 'rate' => false, 'handler' => 'adm_blacklist_add'],

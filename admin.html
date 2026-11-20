@@ -115,6 +115,9 @@ tbody tr:hover{background:var(--soft)}
 .cfg-section{margin:18px 0 10px;padding-bottom:6px;border-bottom:1px dashed var(--line);font-size:13px;font-weight:700;color:var(--accent)}
 .cfg-grid .field{margin:0}
 .cfg-note{font-size:11.5px;color:var(--muted);margin-top:4px}
+.config-missing{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px;padding:11px 14px;border:1px solid rgba(47,111,237,.35);border-radius:12px;background:var(--soft);font-size:12.5px;color:var(--muted)}
+.config-missing b{color:var(--text)}
+.config-missing button{margin-left:auto}
 .switch{display:flex;align-items:center;gap:8px;font-size:13px;padding-top:20px}
 .switch input{width:38px;height:20px;accent-color:var(--accent)}
 .actions-row{display:flex;gap:10px;margin-top:18px;align-items:center}
@@ -292,6 +295,10 @@ html[data-theme="dark"] .toast{background:#2a3a56}
       <!-- 系统配置 -->
       <section id="view-config" hidden>
         <div class="view-head"><h2>系统配置</h2><span class="desc">配置写入根目录 config.toml，保存后自动热重载；时区/语言/版本/数据库路径下次请求生效</span></div>
+        <div id="configMissing" class="config-missing" hidden>
+          <div><b>检测到缺失配置项</b><span id="configMissingKeys"></span></div>
+          <button id="configFillBtn" class="btn-s primary-s" type="button">一键补键</button>
+        </div>
         <form id="configForm" class="panel">
           <div class="cfg-section">高德开放平台</div>
           <div class="cfg-grid">
@@ -343,6 +350,7 @@ html[data-theme="dark"] .toast{background:#2a3a56}
             <label class="field full"><span>数据库路径（相对项目根或绝对路径；下次请求生效）</span><input data-cfg="database_path" type="text" maxlength="300" placeholder="weather.db 或 /www/data/weather/weather.db"></label>
             <label class="field full"><span>跨域白名单（留空仅允许同源，多个用英文逗号分隔）</span><input data-cfg="allow_origin" type="text" maxlength="300" placeholder="https://weather.example.com"></label>
             <div class="switch"><input data-cfg="register_enabled" id="cfgRegister" type="checkbox"><span>开放用户注册</span></div>
+            <div class="switch"><input data-cfg="show_map" id="cfgShowMap" type="checkbox"><span>用户端显示地图</span></div>
             <div class="switch"><input data-cfg="trust_proxy" id="cfgProxy" type="checkbox"><span>信任反向代理 X-Forwarded-For</span></div>
           </div>
 
@@ -859,13 +867,19 @@ html[data-theme="dark"] .toast{background:#2a3a56}
         var warning = row.warning
           ? '<span class="warn-text" title="' + esc(row.warning) + '">' + esc(row.warning) + '</span>'
           : '-';
+        var meId = state.me && state.me.user ? Number(state.me.user.id) : 0;
+        var isSelf = meId > 0 && Number(row.id) === meId;
         var actions = '<div class="action-group">';
         if (stateValue === 'active') {
-          actions += '<button class="btn-s" data-act="disable" data-uid="' + esc(row.id) + '" data-name="' + esc(row.username) + '">停用</button>';
-          actions += '<button class="btn-s danger-s" data-act="ban" data-uid="' + esc(row.id) + '" data-name="' + esc(row.username) + '">封禁</button>';
+          if (!isSelf) {
+            actions += '<button class="btn-s" data-act="disable" data-uid="' + esc(row.id) + '" data-name="' + esc(row.username) + '">停用</button>';
+            actions += '<button class="btn-s danger-s" data-act="ban" data-uid="' + esc(row.id) + '" data-name="' + esc(row.username) + '">封禁</button>';
+          }
         } else if (stateValue === 'disabled') {
           actions += '<button class="btn-s" data-act="enable" data-uid="' + esc(row.id) + '" data-name="' + esc(row.username) + '">启用</button>';
-          actions += '<button class="btn-s danger-s" data-act="ban" data-uid="' + esc(row.id) + '" data-name="' + esc(row.username) + '">封禁</button>';
+          if (!isSelf) {
+            actions += '<button class="btn-s danger-s" data-act="ban" data-uid="' + esc(row.id) + '" data-name="' + esc(row.username) + '">封禁</button>';
+          }
         } else {
           actions += '<button class="btn-s" data-act="enable" data-uid="' + esc(row.id) + '" data-name="' + esc(row.username) + '">解封</button>';
         }
@@ -874,7 +888,7 @@ html[data-theme="dark"] .toast{background:#2a3a56}
         actions += '</div>';
         html += '<tr>' +
           '<td class="mono">' + esc(row.id) + '</td>' +
-          '<td>' + esc(row.username) + '</td>' +
+          '<td>' + esc(row.username) + (isSelf ? ' <span class="badge admin">当前</span>' : '') + '</td>' +
           '<td class="mono">' + email + '</td>' +
           '<td>' + role + '</td>' +
           '<td>' + stateBadge + '</td>' +
@@ -951,14 +965,46 @@ html[data-theme="dark"] .toast{background:#2a3a56}
     $('configUpdated').textContent = '最后更新：' + (cfg.updated_at || '--');
   }
 
+  function renderConfigMissing(missing) {
+    var box = $('configMissing');
+    if (!box) return;
+    if (!missing || !missing.length) {
+      box.hidden = true;
+      $('configMissingKeys').textContent = '';
+      return;
+    }
+    box.hidden = false;
+    $('configMissingKeys').textContent = '：' + missing.join('、') + '（按默认值补入，不覆盖已有配置）';
+  }
+
   async function loadConfig() {
     try {
       var data = await api('admin_config_get', {}, 'POST');
       fillConfig(data.config || {});
+      renderConfigMissing(data.missing || []);
     } catch (e) {
       toast(e.message || '加载配置失败');
     }
   }
+
+  $('configFillBtn').addEventListener('click', async function () {
+    var btn = $('configFillBtn');
+    if (!window.confirm('将缺失的配置项按默认值补入 config.toml？已有配置不会被覆盖。')) return;
+    btn.disabled = true;
+    btn.textContent = '补键中…';
+    try {
+      var data = await api('admin_config_fill', {}, 'POST');
+      fillConfig(data.config || {});
+      renderConfigMissing([]);
+      toast(data.count ? '已补齐 ' + data.count + ' 项配置' : '配置已完整，无需补键');
+      loadOverview();
+    } catch (e) {
+      toast(e.message || '补键失败');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = '一键补键';
+    }
+  });
 
   $('configForm').addEventListener('submit', async function (event) {
     event.preventDefault();
@@ -1167,7 +1213,7 @@ html[data-theme="dark"] .toast{background:#2a3a56}
     $('updApplyBtn').textContent = '更新中…';
     try {
       var data = await api('admin_update_apply', {}, 'POST');
-      setUpdateStatus('更新完成：' + displayVersion(data.from_version) + ' → ' + displayVersion(data.current) + '，页面即将重新加载');
+      setUpdateStatus('更新完成：' + displayVersion(data.from_version) + ' → ' + displayVersion(data.current) + '，页面即将重新加载；如新增配置项，可在系统配置一键补键');
       window.setTimeout(function () { window.location.reload(); }, 1500);
     } catch (e) {
       setUpdateStatus(e.message || '更新失败，已尝试自动回退', true);

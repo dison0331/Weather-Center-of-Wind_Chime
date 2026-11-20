@@ -184,11 +184,11 @@ html[data-theme="dark"] .toast{background:#2a3a56}
 
   <section class="content">
     <div id="weatherCard" class="weather-card panel">
-      <div class="empty">在地图上方搜索城市，查看实时天气</div>
+      <div class="empty">在搜索框输入城市，查看实时天气</div>
     </div>
     <div id="forecastPanel" class="forecast panel" hidden></div>
 
-    <div class="map-panel panel">
+    <div id="mapPanel" class="map-panel panel">
       <div class="map-head"><span>地图标注</span><b id="mapLabel">等待查询</b><span style="margin-left:auto">数据来源：高德开放平台</span></div>
       <div id="map"><div class="map-fallback" id="mapFallback">地图加载中…</div></div>
     </div>
@@ -521,6 +521,7 @@ html[data-theme="dark"] .toast{background:#2a3a56}
   }
 
   async function initMap() {
+    if (state.config.show_map === false) return;
     if (!state.config.amap_ready) {
       setMapFallback('地图服务未配置：管理员可在后台填写高德 JS API Key 与安全密钥');
       return;
@@ -548,6 +549,7 @@ html[data-theme="dark"] .toast{background:#2a3a56}
   }
 
   function locateOnMap(lng, lat, label, weatherText) {
+    if (state.config.show_map === false) return;
     if (!state.map) {
       state.pendingLocate = [lng, lat, label, weatherText];
       return;
@@ -901,9 +903,12 @@ html[data-theme="dark"] .toast{background:#2a3a56}
       state.token = '';
       localStorage.removeItem(STORE.token);
     }
+    var showMap = state.config.show_map !== false;
+    var mapPanel = $('mapPanel');
+    if (mapPanel) mapPanel.hidden = !showMap;
     renderIdentity();
     await loadCities();
-    initMap();
+    if (showMap) initMap();
 
     var refresh = Number(localStorage.getItem(STORE.refresh));
     if (!refresh && state.config.auto_refresh) refresh = Number(state.config.auto_refresh);

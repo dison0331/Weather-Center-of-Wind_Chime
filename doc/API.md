@@ -82,6 +82,7 @@ X-RateLimit-Remaining: 59
   "data": {
     "site_name": "天气中心",
     "site_icon": "favicon.svg",
+    "show_map": true,
     "register_enabled": true,
     "default_city": "深圳",
     "language": "zh-CN",
@@ -509,7 +510,7 @@ X-RateLimit-Remaining: 59
 
 `POST api.php?action=admin_config_get`
 
-返回 `config`（全部配置项 + `updated_at`）与 `file`（配置文件 basename）。配置来自 `config.toml`，仅管理员可见，包含高德密钥。
+返回 `config`（全部配置项 + `updated_at`）、`file`（配置文件 basename）与 `missing`（当前文件中缺失的默认键数组）。配置来自 `config.toml`，仅管理员可见，包含高德密钥。
 
 ### 5.7 admin_config_save
 
@@ -522,6 +523,7 @@ X-RateLimit-Remaining: 59
   "config": {
     "site_name": "天气中心",
     "site_icon": "favicon.svg",
+    "show_map": "1",
     "admin_email": "",
     "app_version": "1.1.0.1021",
     "timezone": "Asia/Shanghai",
@@ -694,6 +696,27 @@ X-RateLimit-Remaining: 59
 ```
 
 无可用备份返回 `1001` / HTTP 400；回退或健康检查失败返回 `5000` / HTTP 500。
+
+### 5.16 admin_config_fill
+
+`POST api.php?action=admin_config_fill`，无参数。
+
+将 `config.toml` 中缺失的默认配置键按默认值补入，**不覆盖已有值**；写入前自动备份到 `config_backups/`。
+
+```json
+{
+  "code": 0,
+  "message": "ok",
+  "data": {
+    "filled": ["show_map", "update_manifest_url"],
+    "count": 2,
+    "config": { "...": "..." },
+    "file": "config.toml"
+  }
+}
+```
+
+配置完整时 `filled` 为空、`count` 为 0。`config.toml` 存在语法错误或不可读时返回 `1001` / HTTP 400。
 
 ---
 

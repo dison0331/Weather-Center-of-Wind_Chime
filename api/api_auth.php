@@ -22,6 +22,7 @@ function auth_config_public($identity)
     return [
         'site_name'        => get_config('site_name', '天气中心'),
         'site_icon'        => get_config('site_icon', 'favicon.svg'),
+        'show_map'         => get_config('show_map', '1') === '1',
         'register_enabled' => get_config('register_enabled', '1') === '1',
         'default_city'     => get_config('default_city', '深圳'),
         'language'         => get_config('language', 'zh-CN'),

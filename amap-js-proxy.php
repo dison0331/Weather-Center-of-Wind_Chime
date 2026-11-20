@@ -44,6 +44,11 @@ if (!apply_cors()) {
     exit;
 }
 
+if (get_config('show_map', '1') !== '1') {
+    echo "window.__AMAP_READY = Promise.resolve(null);\n";
+    exit;
+}
+
 $js = amap_js_config();
 if ($js['key'] === '') {
     echo "window.__AMAP_READY = Promise.reject(new Error('地图服务未配置'));";
