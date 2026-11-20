@@ -1,6 +1,6 @@
 # 天气中心 · 部署文档
 
-> 适用版本：**V1.1.0.1021**（四段式：主版本.次版本.修订号.累加更新号） ｜ 技术栈：PHP 7.2+（推荐 7.4 / 8.0 / 8.1 / 8.2）+ SQLite + TOML + 高德开放平台
+> 适用版本：**V1.1.0.1022**（四段式：主版本.次版本.修订号.累加更新号） ｜ 技术栈：PHP 7.2+（推荐 7.4 / 8.0 / 8.1 / 8.2）+ SQLite + TOML + 高德开放平台
 >
 > 本文档是可直接照做的部署手册，覆盖 **宝塔面板（推荐）**、**Apache**、**Nginx + PHP-FPM** 三种环境。
 > 架构、模块职责与数据流见 [README.md](README.md)；接口参数见 [API.md](API.md)。
@@ -138,7 +138,7 @@ api/.htaccess      Apache 下拒绝后端目录直接访问
 
 ```
 example_config.toml  配置模板（首次部署复制为 config.toml）
-VERSION          版本定义文件（1.1.0.1021）
+VERSION          版本定义文件（1.1.0.1022）
 doc/             交接文档
 mulu.md          目录速查
 ```
@@ -293,7 +293,7 @@ https://你的域名/api.php?action=ping
   "code": 0,
   "message": "ok",
   "data": {
-    "version": "1.1.0.1021",
+    "version": "1.1.0.1022",
     "time": "2026-11-19 10:00:00",
     "site_name": "天气中心",
     "register_enabled": true
@@ -530,7 +530,7 @@ https://weather.example.com,https://www.example.com
 5. 打开后台核对配置（配置保存在 `config.toml`，不会因覆盖代码丢失）；
 6. 测试天气、地图、登录。
 
-**在线更新（可选）：** 后台页头版本号旁「详情」→「检查更新」→「立即更新」。系统会先备份代码、`config.toml` 与数据库到 `update_backups/`，下载并校验 HTTPS 更新包，替换代码后请求 `api.php?action=ping`；失败自动回退，成功后可用「回退到上一版本」恢复。要求 PHP `zip` 扩展，`update_backups/` 对 `www` 可写；更新源在「系统配置 → 更新与维护」填写 `update_manifest_url`。更新完成后若新版本新增了配置项，系统配置页会提示缺失键，点击「一键补键」按默认值补入即可（不覆盖已有配置）。
+**在线更新（可选）：** 后台页头版本号旁「详情」→「检查更新」→「立即更新」。系统会先备份代码、`config.toml` 与数据库到 `update_backups/`，下载并校验 HTTPS 更新包，替换代码后请求 `api.php?action=ping`；失败自动回退，成功后可用「回退到上一版本」恢复。要求 PHP `zip` 扩展，`update_backups/` 对 `www` 可写；更新源在「系统配置 → 更新与维护」选择 `update_source_type`：`manifest` 填自建 JSON 清单地址，`github` 填仓库地址自动读取最新 Release。更新完成后若新版本新增了配置项，系统配置页会提示缺失键，点击「一键补键」按默认值补入即可（不覆盖已有配置）。
 
 当前数据库版本为 `PRAGMA user_version = 3`。旧版本（1/2）会在首次请求时迁移配置与用户表字段（`email` / `account_state` / `warning` / `warned_at`）；旧 `system_config` 迁移完成后可手动执行 `DROP TABLE IF EXISTS system_config;`。升级前务必备份数据库与配置文件。
 
@@ -690,7 +690,7 @@ location = /admin.html {
 | `site_icon` | favicon.svg | 页面图标（URL、data:image 或相对路径） |
 | `show_map` | true | 用户端是否显示地图（关闭后不加载高德 JS SDK） |
 | `admin_email` | 空 | 管理员验证/联系邮箱（仅保存校验，不发送邮件） |
-| `app_version` | 1.1.0.1021 | 站点版本号（四段式，ping 返回） |
+| `app_version` | 1.1.0.1022 | 站点版本号（四段式，ping 返回） |
 | `timezone` | Asia/Shanghai | 时区（IANA 名称） |
 | `language` | zh-CN | 语言（zh-CN / en-US） |
 | `database_path` | weather.db | SQLite 路径；相对项目根或绝对路径 |
@@ -714,6 +714,8 @@ location = /admin.html {
 | `register_enabled` | 1 | 注册开关 |
 | `default_city` | 深圳 | 默认城市 |
 | `auto_refresh` | 300 | 默认自动刷新间隔 |
+| `update_source_type` | manifest | 更新源类型（manifest / github） |
+| `update_manifest_url` | 空 | 自建清单地址或 GitHub 仓库地址；空表示关闭在线更新 |
 | `allow_origin` | 空 | 跨域白名单 |
 | `trust_proxy` | 0 | 是否信任反向代理 |
 

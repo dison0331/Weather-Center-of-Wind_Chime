@@ -2,14 +2,18 @@
 /**
  * api_update.php —— 管理后台在线更新引擎
  *
- * 更新源为 HTTPS JSON 清单（后台系统配置 update_manifest_url）：
- * {
- *   "version": "1.1.0.1022",
- *   "download_url": "https://example.com/weather-1.1.0.1022.zip",
- *   "sha256": "可选，64 位十六进制",
- *   "release_url": "https://github.com/.../releases/tag/...",
- *   "notes": "可选发布说明"
- * }
+ * 更新源支持两种模式（后台系统配置 update_source_type）：
+ * 1. manifest：HTTPS JSON 清单（update_manifest_url 填清单地址）
+ *    {
+ *      "version": "1.1.0.1023",
+ *      "download_url": "https://example.com/weather-1.1.0.1023.zip",
+ *      "sha256": "可选，64 位十六进制",
+ *      "release_url": "https://github.com/.../releases/tag/...",
+ *      "notes": "可选发布说明"
+ *    }
+ * 2. github：update_manifest_url 填 GitHub 仓库地址，自动读取最新 Release
+ *    https://github.com/owner/repo 或 .../releases/latest
+ *    版本号取 Release tag（四段 vX.Y.Z.N），需大于当前版本才会提示更新
  *
  * 更新流程：全量备份（代码/config/DB）→ 下载并校验 ZIP → 校验包结构 →
  * 替换代码（保留 config.toml/DB/config_backups/update_backups）→ 写入新版本号 →
@@ -73,17 +77,110 @@ function update_unlock($fp)
     }
 }
 
-/** 读取并校验更新清单 */
+/** 读取并校验更新清单（根据 update_source_type 选择来源） */
 function update_manifest()
 {
     $url = trim((string) get_config('update_manifest_url', ''));
     if ($url === '') {
-        fail(2001, '未配置更新清单 URL，请先在系统配置中填写', 503);
+        fail(2001, '未配置更新源地址，请先在系统配置中填写', 503);
     }
     if (!preg_match('#^https://#i', $url)) {
-        fail(2001, '更新清单 URL 必须使用 HTTPS', 400);
+        fail(2001, '更新源地址必须使用 HTTPS', 400);
+    }
+    if (get_config('update_source_type', 'manifest') === 'github') {
+        return update_manifest_from_github($url);
+    }
+    return update_manifest_from_json($url);
+}
+
+/** 从 GitHub 仓库地址中提取 owner / repo */
+function update_github_repo($url)
+{
+    $patterns = array(
+        '#^https://github\.com/([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+)/?$#i',
+        '#^https://github\.com/([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+)/releases/latest/?$#i',
+        '#^https://api\.github\.com/repos/([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+)/releases/latest/?$#i',
+    );
+    foreach ($patterns as $pattern) {
+        if (preg_match($pattern, $url, $m)) {
+            return array($m[1], $m[2]);
+        }
+    }
+    fail(2002, 'GitHub 更新源应填写仓库地址，例如 https://github.com/owner/repo', 502);
+}
+
+/** 读取 GitHub 最新 Release，自动选择 ZIP 资产 */
+function update_manifest_from_github($url)
+{
+    list($owner, $repo) = update_github_repo($url);
+    $api = 'https://api.github.com/repos/' . rawurlencode($owner) . '/' . rawurlencode($repo) . '/releases/latest';
+    $response = http_get($api, 15);
+    if ($response['code'] < 200 || $response['code'] >= 300) {
+        fail(2002, 'GitHub 最新 Release 无法访问（HTTP ' . ($response['code'] ?: '0') . '）', 502);
+    }
+    $data = json_decode($response['body'], true);
+    if (!is_array($data)) {
+        fail(2002, 'GitHub Release 响应不是有效 JSON', 502);
+    }
+    if (!empty($data['message'])) {
+        fail(2002, 'GitHub 返回：' . text_cut(trim((string) $data['message']), 200), 502);
     }
 
+    $latest = ltrim(trim((string) ($data['tag_name'] ?? '')), 'Vv');
+    if (!preg_match('/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,9}$/', $latest)) {
+        fail(2002, 'GitHub Release tag 必须为四段式 vX.Y.Z.N', 502);
+    }
+
+    $assets = isset($data['assets']) && is_array($data['assets']) ? $data['assets'] : array();
+    $chosen = null;
+    foreach ($assets as $asset) {
+        if (!is_array($asset)) {
+            continue;
+        }
+        $name = (string) ($asset['name'] ?? '');
+        $download = trim((string) ($asset['browser_download_url'] ?? ''));
+        if ($download === '' || !preg_match('#^https://#i', $download) || !preg_match('/\.zip$/i', $name)) {
+            continue;
+        }
+        if ($chosen === null) {
+            $chosen = $asset;
+        }
+        if (stripos($name, $latest) !== false) {
+            $chosen = $asset;
+            break;
+        }
+    }
+    if ($chosen === null) {
+        fail(2002, 'GitHub Release 未找到 ZIP 资产，请上传完整项目 ZIP', 502);
+    }
+
+    $download = trim((string) ($chosen['browser_download_url'] ?? ''));
+    $sha = '';
+    $digest = strtolower(trim((string) ($chosen['digest'] ?? '')));
+    if (preg_match('/^sha256:([a-f0-9]{64})$/', $digest, $m)) {
+        $sha = $m[1];
+    }
+    $releaseUrl = trim((string) ($data['html_url'] ?? ''));
+    if ($releaseUrl !== '' && !preg_match('#^https://#i', $releaseUrl)) {
+        $releaseUrl = '';
+    }
+    $notes = trim((string) ($data['body'] ?? ''));
+    if (text_len($notes) > 5000) {
+        $notes = text_cut($notes, 5000);
+    }
+
+    return array(
+        'version'      => $latest,
+        'download_url' => $download,
+        'sha256'       => $sha,
+        'release_url'  => $releaseUrl,
+        'notes'        => $notes,
+    );
+}
+
+/** 读取并校验自建 JSON 清单 */
+function update_manifest_from_json($url)
+{
     $response = http_get($url, 10);
     if ($response['code'] < 200 || $response['code'] >= 300) {
         fail(2002, '更新清单无法访问（HTTP ' . ($response['code'] ?: '0') . '）', 502);

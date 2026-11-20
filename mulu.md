@@ -49,7 +49,7 @@
 │  └─ update_backups/      在线更新全量备份（代码/配置/数据库；保留最近 5 份）
 │
 ├─ 文档与索引
-│  ├─ VERSION                 当前版本定义（1.1.0.1021，四段式）
+│  ├─ VERSION                 当前版本定义（1.1.0.1022，四段式）
 │  ├─ LICENSE                 MIT License
 │  ├─ README.md               项目简要说明（快速开始 / 文档入口）
 │  ├─ CONTRIBUTORS.md         贡献者名单与贡献方式
@@ -89,7 +89,7 @@ location ~* \.(db|db-wal|db-shm|sqlite|sql|md|ini|log|toml|bak|tmp|lock)$ { retu
 
 ## 3. 配置说明
 
-- **唯一配置源**：根目录 `config.toml`，包括数据库路径、站点名称/图标、用户端地图显示开关（`show_map`）、管理员验证邮箱、时区、语言、版本号、在线更新清单地址（`update_manifest_url`）、高德 Key、限流参数、注册开关等。
+- **唯一配置源**：根目录 `config.toml`，包括数据库路径、站点名称/图标、用户端地图显示开关（`show_map`）、管理员验证邮箱、时区、语言、版本号、在线更新源类型（`update_source_type`）与地址（`update_manifest_url`，支持自建清单或 GitHub 仓库）、高德 Key、限流参数、注册开关等。
 - **热重载**：外部修改 `config.toml` 后，下一次请求自动读取；后台保存立即刷新当前进程。
 - **自动备份**：保存配置或检测到外部修改时，写入 `config_backups/config-时间戳.toml`（保留最近 20 份）；检测快照为 `config_backups/.snapshot`。
 - **恢复**：把 `config_backups/` 中需要的备份复制为根目录 `config.toml`。
@@ -130,7 +130,7 @@ Nginx 规则         宝塔 / 通用 Nginx 必须添加
 ### 可选
 
 ```
-VERSION     当前版本定义（1.1.0.1021）
+VERSION     当前版本定义（1.1.0.1022）
 LICENSE     MIT License
 CONTRIBUTORS.md  贡献者记录
 README.md   项目简要说明

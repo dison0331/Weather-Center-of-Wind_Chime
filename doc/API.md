@@ -63,7 +63,7 @@ X-RateLimit-Remaining: 59
   "code": 0,
   "message": "ok",
   "data": {
-    "version": "1.1.0.1021",
+    "version": "1.1.0.1022",
     "time": "2026-11-19 10:00:00",
     "site_name": "天气中心",
     "register_enabled": true
@@ -88,7 +88,7 @@ X-RateLimit-Remaining: 59
     "language": "zh-CN",
     "auto_refresh": 300,
     "amap_ready": true,
-    "version": "1.1.0.1021",
+    "version": "1.1.0.1022",
     "server_time": "2026-11-19 10:00:00"
   }
 }
@@ -524,8 +524,10 @@ X-RateLimit-Remaining: 59
     "site_name": "天气中心",
     "site_icon": "favicon.svg",
     "show_map": "1",
+    "update_source_type": "manifest",
+    "update_manifest_url": "",
     "admin_email": "",
-    "app_version": "1.1.0.1021",
+    "app_version": "1.1.0.1022",
     "timezone": "Asia/Shanghai",
     "language": "zh-CN",
     "database_path": "weather.db",
@@ -608,12 +610,12 @@ X-RateLimit-Remaining: 59
   "code": 0,
   "message": "ok",
   "data": {
-    "current": "1.1.0.1021",
+    "current": "1.1.0.1022",
     "manifest_configured": true,
     "last_backup": {
-      "dir": "backup-20261120-153000-1.1.0.1021",
-      "from_version": "1.1.0.1021",
-      "to_version": "1.1.0.1022",
+      "dir": "backup-20261120-153000-1.1.0.1022",
+      "from_version": "1.1.0.1022",
+      "to_version": "1.1.0.1023",
       "created_at": "2026-11-20 15:30:00"
     },
     "backup_count": 2
@@ -627,17 +629,17 @@ X-RateLimit-Remaining: 59
 
 `POST api.php?action=admin_update_check`
 
-读取 `update_manifest_url`（必须为 HTTPS），校验清单后返回：
+按 `update_source_type` 读取更新源（`update_manifest_url` 必须为 HTTPS）：`manifest` 模式解析 JSON 清单；`github` 模式将仓库地址转换为 `https://api.github.com/repos/{owner}/{repo}/releases/latest`，自动取 tag、ZIP 资产与发布说明。校验后返回：
 
 ```json
 {
   "code": 0,
   "message": "ok",
   "data": {
-    "current": "1.1.0.1021",
-    "latest": "1.1.0.1022",
+    "current": "1.1.0.1022",
+    "latest": "1.1.0.1023",
     "update_available": true,
-    "release_url": "https://example.com/releases/1.1.0.1022",
+    "release_url": "https://example.com/releases/1.1.0.1023",
     "notes": "修复若干问题",
     "checked_at": "2026-11-20 15:31:00"
   }
@@ -648,8 +650,8 @@ X-RateLimit-Remaining: 59
 
 ```json
 {
-  "version": "1.1.0.1022",
-  "download_url": "https://example.com/weather-1.1.0.1022.zip",
+  "version": "1.1.0.1023",
+  "download_url": "https://example.com/weather-1.1.0.1023.zip",
   "sha256": "可选，64 位十六进制",
   "release_url": "可选，HTTPS",
   "notes": "可选，发布说明"
@@ -669,9 +671,9 @@ X-RateLimit-Remaining: 59
   "code": 0,
   "message": "ok",
   "data": {
-    "from_version": "1.1.0.1021",
-    "current": "1.1.0.1022",
-    "backup": "backup-20261120-153000-1.1.0.1021"
+    "from_version": "1.1.0.1022",
+    "current": "1.1.0.1023",
+    "backup": "backup-20261120-153000-1.1.0.1022"
   }
 }
 ```
@@ -689,8 +691,8 @@ X-RateLimit-Remaining: 59
   "code": 0,
   "message": "ok",
   "data": {
-    "from_version": "1.1.0.1022",
-    "current": "1.1.0.1021"
+    "from_version": "1.1.0.1023",
+    "current": "1.1.0.1022"
   }
 }
 ```

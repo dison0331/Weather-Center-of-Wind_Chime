@@ -169,7 +169,7 @@ html[data-theme="dark"] .toast{background:#2a3a56}
     </label>
     <div id="loginError" class="form-error"></div>
     <button id="loginSubmit" class="primary" type="submit">登录后台</button>
-    <div class="login-version">版本 <span id="appVersionLogin">V1.1.0.1021</span></div>
+    <div class="login-version">版本 <span id="appVersionLogin">V1.1.0.1022</span></div>
   </form>
 </div>
 
@@ -177,7 +177,7 @@ html[data-theme="dark"] .toast{background:#2a3a56}
   <header class="app-header">
     <div class="brand"><span id="brandName">天气中心</span><small>管理后台</small></div>
     <div class="spacer"></div>
-    <span id="appVersion" class="app-version">V1.1.0.1021</span>
+    <span id="appVersion" class="app-version">V1.1.0.1022</span>
     <button id="updateDetailBtn" class="hbtn plain" type="button" title="查看版本详情与在线更新">详情</button>
     <span id="adminWho" class="who"></span>
     <a class="hbtn plain" href="user.html" target="_blank" rel="noopener">用户端</a>
@@ -341,7 +341,7 @@ html[data-theme="dark"] .toast{background:#2a3a56}
           <div class="cfg-grid">
             <label class="field"><span>站点名称</span><input data-cfg="site_name" type="text" maxlength="60"></label>
             <label class="field"><span>站点图标（URL / data:image / 相对路径）</span><input data-cfg="site_icon" type="text" maxlength="4000" placeholder="favicon.svg"></label>
-            <label class="field"><span>站点版本号（四段式 X.Y.Z.N）</span><input data-cfg="app_version" type="text" maxlength="30" placeholder="1.1.0.1021"></label>
+            <label class="field"><span>站点版本号（四段式 X.Y.Z.N）</span><input data-cfg="app_version" type="text" maxlength="30" placeholder="1.1.0.1022"></label>
             <label class="field"><span>管理员验证邮箱（可选）</span><input data-cfg="admin_email" type="email" maxlength="254" placeholder="admin@example.com"></label>
             <label class="field"><span>默认城市</span><input data-cfg="default_city" type="text" maxlength="50"></label>
             <label class="field"><span>时区（IANA）</span><input data-cfg="timezone" type="text" maxlength="60" placeholder="Asia/Shanghai"></label>
@@ -356,9 +356,15 @@ html[data-theme="dark"] .toast{background:#2a3a56}
 
           <div class="cfg-section">更新与维护</div>
           <div class="cfg-grid">
-            <label class="field full"><span>更新清单 URL（HTTPS JSON，留空则关闭在线更新）</span><input data-cfg="update_manifest_url" type="url" maxlength="300" placeholder="https://example.com/weather-manifest.json"></label>
+            <label class="field"><span>更新源类型</span>
+              <select data-cfg="update_source_type" id="cfgUpdateSourceType">
+                <option value="manifest">自定义清单（JSON）</option>
+                <option value="github">GitHub 最新 Release</option>
+              </select>
+            </label>
+            <label class="field full"><span id="updateUrlLabel">更新清单 URL（HTTPS JSON，留空则关闭在线更新）</span><input data-cfg="update_manifest_url" type="url" maxlength="300" placeholder="https://example.com/weather-manifest.json"></label>
           </div>
-          <div class="cfg-note">清单需包含 version、download_url（HTTPS），可选 sha256、release_url、notes；更新前自动全量备份，失败自动回退。</div>
+          <div class="cfg-note">自定义清单需包含 version、download_url（HTTPS）；GitHub 模式直接读取最新 Release 的 tag 与 ZIP 资产。更新前自动全量备份，失败自动回退。</div>
 
           <div class="actions-row">
             <button class="btn-s primary-s" type="submit" id="configSave" style="height:38px;padding:0 20px">保存配置</button>
@@ -982,10 +988,28 @@ html[data-theme="dark"] .toast{background:#2a3a56}
       var data = await api('admin_config_get', {}, 'POST');
       fillConfig(data.config || {});
       renderConfigMissing(data.missing || []);
+      syncUpdateSourceHint();
     } catch (e) {
       toast(e.message || '加载配置失败');
     }
   }
+
+  function syncUpdateSourceHint() {
+    var typeEl = $('cfgUpdateSourceType');
+    var label = $('updateUrlLabel');
+    var input = document.querySelector('[data-cfg="update_manifest_url"]');
+    if (!typeEl || !label || !input) return;
+    if (typeEl.value === 'github') {
+      label.textContent = 'GitHub 仓库地址（如 https://github.com/owner/repo）';
+      input.placeholder = 'https://github.com/owner/repo';
+    } else {
+      label.textContent = '更新清单 URL（HTTPS JSON，留空则关闭在线更新）';
+      input.placeholder = 'https://example.com/weather-manifest.json';
+    }
+  }
+
+  $('cfgUpdateSourceType').addEventListener('change', syncUpdateSourceHint);
+  syncUpdateSourceHint();
 
   $('configFillBtn').addEventListener('click', async function () {
     var btn = $('configFillBtn');

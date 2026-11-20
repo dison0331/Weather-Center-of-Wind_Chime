@@ -6,7 +6,7 @@
 site_name = "天气中心"
 site_icon = "favicon.svg"
 show_map = true
-app_version = "1.1.0.1021"
+app_version = "1.1.0.1022"
 admin_email = ""
 timezone = "Asia/Shanghai"
 language = "zh-CN"
@@ -44,5 +44,7 @@ cache_ttl_geocode = 86400
 log_retain_days = 30
 
 # ===== 更新与维护 =====
-# 在线更新清单 HTTPS JSON 地址；留空则后台“检查更新”不可用
+# manifest=自建 JSON 清单；github=直接读取 GitHub 最新 Release
+update_source_type = "manifest"
+# manifest 模式填清单 HTTPS 地址；github 模式填仓库地址；留空则关闭在线更新
 update_manifest_url = ""

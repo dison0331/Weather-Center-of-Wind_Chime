@@ -1,6 +1,6 @@
 # 天气中心 · 系统设计与交接文档
 
-> 版本：V1.1.0.1021（四段式：主版本.次版本.修订号.累加更新号） ｜ 技术栈：原生 HTML/CSS/JS + PHP 7.2+（推荐 7.4/8.x）+ SQLite + TOML ｜ 数据源：高德开放平台
+> 版本：V1.1.0.1022（四段式：主版本.次版本.修订号.累加更新号） ｜ 技术栈：原生 HTML/CSS/JS + PHP 7.2+（推荐 7.4/8.x）+ SQLite + TOML ｜ 数据源：高德开放平台
 >
 > 本文档面向后续开发者与接手人员，涵盖目录结构、模块职责、数据库设计、鉴权限流、调用关系、数据流向、部署与安全注意事项。
 > 根目录 [README.md](../README.md) 提供简要说明与快速开始。
@@ -66,7 +66,7 @@
 │  └─ update_backups/       在线更新全量备份（代码/配置/数据库，保留最近 5 份）
 │
 ├─ 文档与索引
-│  ├─ VERSION              当前版本定义（1.1.0.1021，四段式）
+│  ├─ VERSION              当前版本定义（1.1.0.1022，四段式）
 │  ├─ LICENSE               MIT License
 │  ├─ README.md             项目简要说明（快速开始 / 文档入口）
 │  ├─ CONTRIBUTORS.md       贡献者名单与贡献方式
@@ -176,8 +176,9 @@
 | `site_icon` | favicon.svg | 页面图标（URL、data:image 或相对路径） |
 | `show_map` | true | 用户端是否显示地图；关闭后不加载高德 JS SDK |
 | `admin_email` | 空 | 管理员验证/联系邮箱；仅保存与格式校验，不包含 SMTP 发信 |
-| `app_version` | 1.1.0.1021 | 站点版本号（四段式）；`ping` 返回该值 |
-| `update_manifest_url` | 空 | 在线更新清单 HTTPS JSON 地址；空表示关闭在线更新 |
+| `app_version` | 1.1.0.1022 | 站点版本号（四段式）；`ping` 返回该值 |
+| `update_source_type` | manifest | 更新源类型：`manifest` 自建 JSON 清单 / `github` 直接读取 GitHub 最新 Release |
+| `update_manifest_url` | 空 | 自建清单 HTTPS 地址，或 GitHub 仓库地址（按 `update_source_type`）；空表示关闭在线更新 |
 | `timezone` | Asia/Shanghai | PHP 时区（IANA 名称） |
 | `language` | zh-CN | 站点语言（`zh-CN` / `en-US`） |
 | `default_city` | 深圳 | 用户端默认城市 |
@@ -574,8 +575,11 @@ cp -a /www/wwwroot/weather.yousb.top/config_backups /www/backup/weather/$STAMP/ 
 
 后台页头版本号旁的「详情」提供版本查看与在线更新：检查更新、全量备份后更新、失败自动回退、手动回退到上一节点。
 
-- **更新源**：在「系统配置 → 更新与维护」填写 `update_manifest_url`，必须是 HTTPS JSON 清单；
-- **清单格式**：`version`（四段式）、`download_url`（HTTPS ZIP）、可选 `sha256`、`release_url`、`notes`；
+- **更新源**：在「系统配置 → 更新与维护」选择 `update_source_type`：
+  - `manifest`：`update_manifest_url` 填 HTTPS JSON 清单地址；
+  - `github`：`update_manifest_url` 填 GitHub 仓库地址（如 `https://github.com/owner/repo`），系统自动读取最新 Release 的 tag 与 ZIP 资产；
+- **清单格式**（manifest 模式）：`version`（四段式）、`download_url`（HTTPS ZIP）、可选 `sha256`、`release_url`、`notes`；
+- **GitHub 模式**：tag 必须为四段式 `vX.Y.Z.N`；Release 需上传完整项目 ZIP 资产（优先选择文件名含版本号的 ZIP）；
 - **包结构**：完整项目 ZIP（根目录含 `api.php` 或唯一顶层目录），必须包含入口页面、`api/` 全部模块、`schema.sql`、`VERSION`；**不要包含** `config.toml` 与 `weather.db*`（更新时会被忽略）；
 - **备份位置**：`update_backups/backup-时间戳-版本/`，包含 `code/`、`config.toml`、`db/`、`backup.json`，保留最近 5 份；
 - **保护目录**：更新只替换代码，保留 `config.toml`、`weather.db*`、`config_backups/`、`update_backups/`、`.git/`、`.codeartsdoer/`、`.user.ini`；
@@ -631,7 +635,7 @@ cp -a /www/wwwroot/weather.yousb.top/config_backups /www/backup/weather/$STAMP/ 
 | Y | 修订号 | 小版本更新 |
 | Z | 累加更新号 | 每次构建或发布递增的累计序号 |
 
-- 当前版本：`V1.1.0.1021`（存储与接口：`1.1.0.1021`）
+- 当前版本：`V1.1.0.1022`（存储与接口：`1.1.0.1022`）
 - 版本定义文件：根目录 `VERSION`
 - 对外展示：README、doc 文档、管理后台页头与登录页、用户端状态栏、入口页、`ping` / `config_public`
 - 兼容策略：后台允许保存旧三段值 `X.Y.Z`，新填写值使用四段；历史变更记录保留原始格式
@@ -648,6 +652,7 @@ cp -a /www/wwwroot/weather.yousb.top/config_backups /www/backup/weather/$STAMP/ 
 | v1.0.4 | 2026-11-19 | 配置架构调整：新增 `config.toml` 与轻量 TOML 解析器 `api/toml.php`；数据库路径、时区、语言、版本号、高德 Key、限流、注册开关统一写入 TOML，支持 mtime 热重载、文件锁、原子写与自动备份；SQLite 只保留用户与业务数据，旧 `system_config` 自动迁移；后台新增语言/时区/版本/数据库路径字段 |
 | v1.1.0 | 2026-11-20 | 版本号升级至 1.1.0；配置架构沿用 v1.0.4；新增后台验证邮箱配置、站点图标/名称动态化、用户创建/停用/封禁/警告/重置密码、用户邮箱与账号细分状态（数据库 user_version 3） |
 | v1.1.0.1021 | 2026-11-20 | 版本号统一为四段式 V1.1.0.1021；新增根目录 `VERSION` 定义文件与各页面版本展示；后台版本校验兼容旧三段值，新值使用四段 |
-| 未发布 | 2026-11-20 | 新增管理后台在线更新：版本号旁「详情」面板、检查更新、全量备份后更新、失败自动回退与手动回退；新增配置 `update_manifest_url`、模块 `api/api_update.php` 与运行时目录 `update_backups/` |
-| 未发布 | 2026-11-20 | 用户端地图改为后台可选项：新增配置 `show_map`（默认开启），关闭后不加载高德 JS SDK 并隐藏地图面板；账号管理对当前登录账号隐藏停用/封禁操作，后端自锁判断统一按整型比较 |
-| 未发布 | 2026-11-20 | 系统配置新增缺失键检测与「一键补键」（`admin_config_fill`）：升级后自动识别新版本新增的默认配置键，按默认值补入且不覆盖已有配置，写入前自动备份 |
+| v1.1.0.1022 | 2026-11-20 | 新增管理后台在线更新：版本号旁「详情」面板、检查更新、全量备份后更新、失败自动回退与手动回退；新增配置 `update_manifest_url`、模块 `api/api_update.php` 与运行时目录 `update_backups/` |
+| v1.1.0.1022 | 2026-11-20 | 用户端地图改为后台可选项：新增配置 `show_map`（默认开启），关闭后不加载高德 JS SDK 并隐藏地图面板；账号管理对当前登录账号隐藏停用/封禁操作，后端自锁判断统一按整型比较 |
+| v1.1.0.1022 | 2026-11-20 | 系统配置新增缺失键检测与「一键补键」（`admin_config_fill`）：升级后自动识别新版本新增的默认配置键，按默认值补入且不覆盖已有配置，写入前自动备份 |
+| v1.1.0.1022 | 2026-11-20 | 在线更新源支持两种模式：新增配置 `update_source_type`（默认 `manifest`），可切换为直接读取 GitHub 最新 Release；后台按类型切换地址提示，GitHub 模式自动解析 tag、ZIP 资产与发布说明（配置键 32） |

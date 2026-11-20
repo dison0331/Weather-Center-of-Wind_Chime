@@ -21,8 +21,9 @@ function toml_default_config()
         'site_name'             => '天气中心',
         'site_icon'             => 'favicon.svg',
         'show_map'              => '1',
-        'app_version'           => '1.1.0.1021',
+        'app_version'           => '1.1.0.1022',
         'admin_email'           => '',
+        'update_source_type'    => 'manifest',
         'update_manifest_url'   => '',
         'timezone'              => 'Asia/Shanghai',
         'language'              => 'zh-CN',
@@ -79,7 +80,7 @@ function toml_config_groups()
             'cache_ttl_weather', 'cache_ttl_tips', 'cache_ttl_regeo',
             'cache_ttl_geocode', 'log_retain_days',
         ],
-        '更新与维护' => ['update_manifest_url'],
+        '更新与维护' => ['update_source_type', 'update_manifest_url'],
     ];
 }
 

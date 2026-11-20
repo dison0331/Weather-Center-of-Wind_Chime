@@ -443,7 +443,8 @@ function adm_config_save($identity)
     ];
     $enumFields = [
         'register_enabled' => ['0', '1'],
-        'show_map'         => ['0', '1'],
+        'show_map'          => ['0', '1'],
+        'update_source_type' => ['manifest', 'github'],
         'trust_proxy'      => ['0', '1'],
         'language'         => ['zh-CN', 'en-US'],
     ];
