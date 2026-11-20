@@ -2,7 +2,7 @@
 
 基于高德开放平台的实时天气与预报系统，包含用户端、管理后台、统一 PHP API 与 SQLite 数据库。
 
-- 版本：V1.1.0.1021（四段式：主版本.次版本.修订号.累加更新号）
+- 版本：V1.1.0.1022（四段式：主版本.次版本.修订号.累加更新号）
 - 许可证：MIT（详见 [LICENSE](LICENSE)）
 - 技术栈：原生 HTML/CSS/JS、PHP 7.2+（推荐 7.4 / 8.x）、SQLite、TOML
 - 配置：根目录 `config.toml`（唯一配置源，不提交 Git；修改后自动热重载）
@@ -33,7 +33,7 @@ example_config.toml                  配置模板（唯一允许提交的配置�
 doc/                                 架构、接口、部署文档
 mulu.md                              目录速查
 README.md                            项目简要说明
-VERSION                              当前版本定义（1.1.0.1021）
+VERSION                              当前版本定义（1.1.0.1022）
 LICENSE                              MIT License
 CONTRIBUTORS.md                      贡献者名单与贡献方式
 ```

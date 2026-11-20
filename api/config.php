@@ -55,7 +55,7 @@ if (!toml_valid_timezone($timezone)) {
 define('APP_TIMEZONE', $timezone);
 
 $appVersion = trim((string) ($bootConfig['app_version'] ?? ''));
-define('APP_VERSION', $appVersion !== '' ? $appVersion : '1.1.0.1021');
+define('APP_VERSION', $appVersion !== '' ? $appVersion : '1.1.0.1022');
 
 $appLanguage = trim((string) ($bootConfig['language'] ?? ''));
 define('APP_LANGUAGE', $appLanguage !== '' ? $appLanguage : 'zh-CN');
