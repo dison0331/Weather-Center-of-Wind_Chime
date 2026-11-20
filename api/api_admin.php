@@ -368,6 +368,7 @@ function adm_config_save($identity)
         'site_name'             => 60,
         'site_icon'             => 4000,
         'app_version'           => 30,
+        'update_manifest_url'   => 300,
         'admin_email'           => 254,
         'timezone'              => 60,
         'default_city'          => 50,
@@ -466,6 +467,10 @@ function adm_config_save($identity)
         if (is_file($target) && !is_writable($target)) {
             fail(1001, '数据库文件不可写：' . $target, 400);
         }
+    }
+    if (isset($pairs['update_manifest_url']) && $pairs['update_manifest_url'] !== ''
+        && !preg_match('#^https://[^\s]+$#i', $pairs['update_manifest_url'])) {
+        fail(1001, '更新清单 URL 必须为 HTTPS 地址', 400);
     }
     if (isset($pairs['allow_origin']) && $pairs['allow_origin'] !== '') {
         foreach (explode(',', $pairs['allow_origin']) as $origin) {

@@ -595,6 +595,106 @@ X-RateLimit-Remaining: 59
 
 `POST api.php?action=admin_blacklist_delete`，参数 `id`。
 
+### 5.12 admin_update_status
+
+`POST api.php?action=admin_update_status`
+
+返回当前版本、是否已配置更新源与可回退节点：
+
+```json
+{
+  "code": 0,
+  "message": "ok",
+  "data": {
+    "current": "1.1.0.1021",
+    "manifest_configured": true,
+    "last_backup": {
+      "dir": "backup-20261120-153000-1.1.0.1021",
+      "from_version": "1.1.0.1021",
+      "to_version": "1.1.0.1022",
+      "created_at": "2026-11-20 15:30:00"
+    },
+    "backup_count": 2
+  }
+}
+```
+
+`last_backup` 为 `null` 时表示暂无可回退节点。
+
+### 5.13 admin_update_check
+
+`POST api.php?action=admin_update_check`
+
+读取 `update_manifest_url`（必须为 HTTPS），校验清单后返回：
+
+```json
+{
+  "code": 0,
+  "message": "ok",
+  "data": {
+    "current": "1.1.0.1021",
+    "latest": "1.1.0.1022",
+    "update_available": true,
+    "release_url": "https://example.com/releases/1.1.0.1022",
+    "notes": "修复若干问题",
+    "checked_at": "2026-11-20 15:31:00"
+  }
+}
+```
+
+更新清单 JSON 格式：
+
+```json
+{
+  "version": "1.1.0.1022",
+  "download_url": "https://example.com/weather-1.1.0.1022.zip",
+  "sha256": "可选，64 位十六进制",
+  "release_url": "可选，HTTPS",
+  "notes": "可选，发布说明"
+}
+```
+
+错误：未配置更新源 `2001` / HTTP 503；清单不可访问或格式错误 `2002` / HTTP 502。
+
+### 5.14 admin_update_apply
+
+`POST api.php?action=admin_update_apply`，无参数。
+
+流程：互斥锁 → 校验清单与版本 → 全量备份（代码 + `config.toml` + 数据库）→ 下载并校验 ZIP → 校验包结构 → 替换代码（保留配置/数据库/备份目录）→ 写入新版本号 → HTTP `ping` 健康检查。任一步失败自动从备份回退。
+
+```json
+{
+  "code": 0,
+  "message": "ok",
+  "data": {
+    "from_version": "1.1.0.1021",
+    "current": "1.1.0.1022",
+    "backup": "backup-20261120-153000-1.1.0.1021"
+  }
+}
+```
+
+依赖 `ZipArchive` 扩展；下载优先 cURL，回退 `file_get_contents`。失败返回 `5000` / HTTP 500（已尝试自动回退），并发任务返回 `1005` / HTTP 409。
+
+### 5.15 admin_update_rollback
+
+`POST api.php?action=admin_update_rollback`，无参数。
+
+回退到最近一次 `status=success` 的备份，恢复代码、`config.toml` 与数据库，并做健康检查：
+
+```json
+{
+  "code": 0,
+  "message": "ok",
+  "data": {
+    "from_version": "1.1.0.1022",
+    "current": "1.1.0.1021"
+  }
+}
+```
+
+无可用备份返回 `1001` / HTTP 400；回退或健康检查失败返回 `5000` / HTTP 500。
+
 ---
 
 ## 6. 调用示例

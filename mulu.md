@@ -29,6 +29,7 @@
 │  ├─ api_weather.php         天气、地点联想、逆地理、地理编码
 │  ├─ api_cities.php          关注城市增删改查
 │  ├─ api_admin.php           管理后台全部接口
+│  ├─ api_update.php          在线更新：清单校验、下载、全量备份、失败自动回退
 │  └─ .htaccess               Apache 下拒绝 Web 直接访问
 │
 ├─ 数据与部署配置
@@ -43,8 +44,9 @@
 │  ├─ weather.db-wal          WAL 预写日志
 │  ├─ weather.db-shm          共享内存索引
 │  ├─ config.toml.lock    配置写入文件锁（根目录，扩展名规则拒绝）
-│  └─ config_backups/      自动备份目录（含 .htaccess 保护；保留最近 20 份）
-│     └─ .snapshot         外部修改检测快照
+│  ├─ config_backups/      自动备份目录（含 .htaccess 保护；保留最近 20 份）
+│  │  └─ .snapshot         外部修改检测快照
+│  └─ update_backups/      在线更新全量备份（代码/配置/数据库；保留最近 5 份）
 │
 ├─ 文档与索引
 │  ├─ VERSION                 当前版本定义（1.1.0.1021，四段式）
@@ -67,7 +69,7 @@
 | `index.html` / `user.html` / `admin.html` / `404.html` | 允许 | 静态页面 |
 | `api.php` / `amap-js-proxy.php` | 允许 | 唯一后端对外入口 |
 | `/api/` 整个目录 | 拒绝 | 宝塔 Nginx `location ^~ /api/`；Apache `api/.htaccess` |
-| `config.toml` / `config.toml.lock` / `config_backups/` | 拒绝 | 根 `.htaccess` 与 Nginx 规则（`.toml/.lock` + 备份目录 404） |
+| `config.toml` / `config.toml.lock` / `config_backups/` / `update_backups/` | 拒绝 | 根 `.htaccess` 与 Nginx 规则（`.toml/.lock` + 备份目录 404） |
 | `schema.sql` / `weather.db*` / `.user.ini` / `.htaccess` | 拒绝 | 根 `.htaccess` 与 Nginx 扩展名规则 |
 | `README.md` / `mulu.md` / `doc/*.md` | 拒绝 | 同上 |
 
@@ -78,6 +80,8 @@ location = /api { return 404; }
 location ^~ /api/ { return 404; }
 location = /config_backups { return 404; }
 location ^~ /config_backups/ { return 404; }
+location = /update_backups { return 404; }
+location ^~ /update_backups/ { return 404; }
 location ~* \.(db|db-wal|db-shm|sqlite|sql|md|ini|log|toml|bak|tmp|lock)$ { return 404; }
 ```
 
@@ -85,7 +89,7 @@ location ~* \.(db|db-wal|db-shm|sqlite|sql|md|ini|log|toml|bak|tmp|lock)$ { retu
 
 ## 3. 配置说明
 
-- **唯一配置源**：根目录 `config.toml`，包括数据库路径、站点名称/图标、管理员验证邮箱、时区、语言、版本号、高德 Key、限流参数、注册开关等。
+- **唯一配置源**：根目录 `config.toml`，包括数据库路径、站点名称/图标、管理员验证邮箱、时区、语言、版本号、在线更新清单地址（`update_manifest_url`）、高德 Key、限流参数、注册开关等。
 - **热重载**：外部修改 `config.toml` 后，下一次请求自动读取；后台保存立即刷新当前进程。
 - **自动备份**：保存配置或检测到外部修改时，写入 `config_backups/config-时间戳.toml`（保留最近 20 份）；检测快照为 `config_backups/.snapshot`。
 - **恢复**：把 `config_backups/` 中需要的备份复制为根目录 `config.toml`。
@@ -109,7 +113,8 @@ schema.sql  config.toml
 ```
 config.php  toml.php
 helpers.php  db.php  auth.php  rate_limit.php  amap.php
-api_auth.php  api_weather.php  api_cities.php  api_admin.php
+api_auth.php  api_weather.php  api_cities.php
+api_admin.php  api_update.php
 ```
 
 ### 按环境需要
@@ -143,6 +148,7 @@ weather.db*         运行时生成；迁移场景除外
 config.toml.lock  运行时生成
 config_backups/  自动备份目录
 config_backups/.snapshot  配置修改检测快照
+update_backups/  在线更新备份目录（含代码、配置与数据库副本）
 ```
 
 ## 5. 结构约定

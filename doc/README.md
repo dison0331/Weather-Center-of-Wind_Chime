@@ -49,6 +49,7 @@
 │  ├─ api_weather.php       天气 / 联想 / 逆地理 / 地理编码（全部走高德代理）
 │  ├─ api_cities.php        关注城市增删改查
 │  ├─ api_admin.php         管理后台全部接口
+│  ├─ api_update.php        在线更新：清单校验、下载、全量备份、失败自动回退
 │  └─ .htaccess             Apache 下拒绝 Web 直接访问 api/ 目录
 │
 ├─ 数据与部署配置
@@ -61,7 +62,8 @@
 ├─ 运行时自动生成（不要上传）
 │  ├─ weather.db            SQLite 主库
 │  ├─ weather.db-wal        WAL 模式预写日志
-│  └─ weather.db-shm        共享内存索引
+│  ├─ weather.db-shm        共享内存索引
+│  └─ update_backups/       在线更新全量备份（代码/配置/数据库，保留最近 5 份）
 │
 ├─ 文档与索引
 │  ├─ VERSION              当前版本定义（1.1.0.1021，四段式）
@@ -93,7 +95,7 @@
 | `index.html` / `user.html` / `admin.html` / `404.html` | 允许 | 静态页面 |
 | `api.php` / `amap-js-proxy.php` | 允许 | 唯一后端对外入口 |
 | `/api/` 整个目录 | 拒绝 | `api/.htaccess`；宝塔需 Nginx 规则 |
-| `config.toml` / `config.toml.lock` / `config_backups/` | 拒绝 | 根 `.htaccess`；宝塔需 Nginx 规则 |
+| `config.toml` / `config.toml.lock` / `config_backups/` / `update_backups/` | 拒绝 | 根 `.htaccess`；宝塔需 Nginx 规则 |
 | `schema.sql` / `weather.db*` / `.user.ini` / `.htaccess` | 拒绝 | 根 `.htaccess`；宝塔需 Nginx 规则 |
 | `README.md` / `mulu.md` / `doc/*.md` | 拒绝 | 同上 |
 
@@ -102,10 +104,10 @@
 ### 2.3 部署文件清单
 
 - **必需（根目录）**：`api.php`、`amap-js-proxy.php`、`index.html`、`user.html`、`admin.html`、`404.html`、`favicon.svg`、`schema.sql`、`config.toml`；
-- **必需（api/ 目录）**：`config.php`、`toml.php`、`helpers.php`、`db.php`、`auth.php`、`rate_limit.php`、`amap.php`、`api_auth.php`、`api_weather.php`、`api_cities.php`、`api_admin.php`；
+- **必需（api/ 目录）**：`config.php`、`toml.php`、`helpers.php`、`db.php`、`auth.php`、`rate_limit.php`、`amap.php`、`api_auth.php`、`api_weather.php`、`api_cities.php`、`api_admin.php`、`api_update.php`；
 - **按环境需要**：`.htaccess` 与 `api/.htaccess`（Apache）、`.user.ini`（宝塔/PHP-FPM 建议）、Nginx 规则（宝塔/通用 Nginx 必须）；
 - **可选**：`LICENSE`、`README.md`、`CONTRIBUTORS.md`、`VERSION`、`example_config.toml`、`doc/`、`mulu.md`；
-- **不要上传**：`.codeartsdoer/`、`.git/`、`.gitignore`、`config_backups/`、`config_backups/.snapshot`、本地生成的 `weather.db*`（迁移场景除外）。
+- **不要上传**：`.codeartsdoer/`、`.git/`、`.gitignore`、`config_backups/`、`config_backups/.snapshot`、`update_backups/`、本地生成的 `weather.db*`（迁移场景除外）。
 
 详细步骤见 [DEPLOY.md 4.2](DEPLOY.md#42-上传文件)。
 
@@ -127,6 +129,7 @@
 | `api/api_weather.php` | `wx_*` 处理函数 + 路由数组 | `api/amap.php` |
 | `api/api_cities.php` | `city_*` 处理函数 + 路由数组 | `api/db.php` |
 | `api/api_admin.php` | `adm_*` 处理函数 + 路由数组 | `api/db.php`、`api/auth.php` |
+| `api/api_update.php` | `admin_update_*` 处理函数 + 路由数组：清单校验、下载、全量备份、代码替换、健康检查与回退 | `api/db.php`、`api/toml.php`、`api/helpers.php` |
 | `amap-js-proxy.php` | 根目录入口：读取 JS Key / 安全密钥，输出 `window._AMapSecurityConfig` 与 `window.__AMap_READY` | `api/db.php`、`api/amap.php` |
 
 > 路由模块约定：每个 `api/api_*.php` 末尾 `return [...]`，键为 action 名，值为 `['auth' => public|guest_token|user|admin, 'rate' => bool, 'amap' => bool, 'handler' => callable]`。根目录 `api.php` 用 `array_merge` 合并，便于按模块扩展。
@@ -173,6 +176,7 @@
 | `site_icon` | favicon.svg | 页面图标（URL、data:image 或相对路径） |
 | `admin_email` | 空 | 管理员验证/联系邮箱；仅保存与格式校验，不包含 SMTP 发信 |
 | `app_version` | 1.1.0.1021 | 站点版本号（四段式）；`ping` 返回该值 |
+| `update_manifest_url` | 空 | 在线更新清单 HTTPS JSON 地址；空表示关闭在线更新 |
 | `timezone` | Asia/Shanghai | PHP 时区（IANA 名称） |
 | `language` | zh-CN | 站点语言（`zh-CN` / `en-US`） |
 | `default_city` | 深圳 | 用户端默认城市 |
@@ -562,6 +566,21 @@ cp -a /www/wwwroot/weather.yousb.top/config_backups /www/backup/weather/$STAMP/ 
 
 ## 10. 运维建议
 
+### 10.1 在线更新（可选）
+
+后台页头版本号旁的「详情」提供版本查看与在线更新：检查更新、全量备份后更新、失败自动回退、手动回退到上一节点。
+
+- **更新源**：在「系统配置 → 更新与维护」填写 `update_manifest_url`，必须是 HTTPS JSON 清单；
+- **清单格式**：`version`（四段式）、`download_url`（HTTPS ZIP）、可选 `sha256`、`release_url`、`notes`；
+- **包结构**：完整项目 ZIP（根目录含 `api.php` 或唯一顶层目录），必须包含入口页面、`api/` 全部模块、`schema.sql`、`VERSION`；**不要包含** `config.toml` 与 `weather.db*`（更新时会被忽略）；
+- **备份位置**：`update_backups/backup-时间戳-版本/`，包含 `code/`、`config.toml`、`db/`、`backup.json`，保留最近 5 份；
+- **保护目录**：更新只替换代码，保留 `config.toml`、`weather.db*`、`config_backups/`、`update_backups/`、`.git/`、`.codeartsdoer/`、`.user.ini`；
+- **健康检查**：更新与回退后都会请求 `api.php?action=ping`，版本不一致视为失败并自动回退；
+- **环境要求**：PHP `zip`（ZipArchive）扩展；`curl` 优先，无 curl 时回退 `file_get_contents`；`update_backups/` 需对 PHP 运行用户可写；
+- **安全**：清单、下载地址与重定向均只接受 HTTPS；ZIP 解压拒绝绝对路径、`..`、盘符与符号链接。
+
+### 10.2 日常建议
+
 - **备份**：定期备份 `weather.db` 与 `config.toml`（含 WAL 时建议先执行 `PRAGMA wal_checkpoint(TRUNCATE);` 或直接停写后复制三个数据库文件）。
 - **日志**：后台「访问日志」支持按 IP / 接口 / 用户 / 日期筛选分页；超期自动清理（默认 30 天）。
 - **配额监控**：后台看板展示今日真实调用、缓存命中、成功率与估算剩余配额。
@@ -625,3 +644,4 @@ cp -a /www/wwwroot/weather.yousb.top/config_backups /www/backup/weather/$STAMP/ 
 | v1.0.4 | 2026-11-19 | 配置架构调整：新增 `config.toml` 与轻量 TOML 解析器 `api/toml.php`；数据库路径、时区、语言、版本号、高德 Key、限流、注册开关统一写入 TOML，支持 mtime 热重载、文件锁、原子写与自动备份；SQLite 只保留用户与业务数据，旧 `system_config` 自动迁移；后台新增语言/时区/版本/数据库路径字段 |
 | v1.1.0 | 2026-11-20 | 版本号升级至 1.1.0；配置架构沿用 v1.0.4；新增后台验证邮箱配置、站点图标/名称动态化、用户创建/停用/封禁/警告/重置密码、用户邮箱与账号细分状态（数据库 user_version 3） |
 | v1.1.0.1021 | 2026-11-20 | 版本号统一为四段式 V1.1.0.1021；新增根目录 `VERSION` 定义文件与各页面版本展示；后台版本校验兼容旧三段值，新值使用四段 |
+| 未发布 | 2026-11-20 | 新增管理后台在线更新：版本号旁「详情」面板、检查更新、全量备份后更新、失败自动回退与手动回退；新增配置 `update_manifest_url`、模块 `api/api_update.php` 与运行时目录 `update_backups/` |

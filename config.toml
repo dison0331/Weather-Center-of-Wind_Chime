@@ -41,3 +41,7 @@ cache_ttl_tips = 300
 cache_ttl_regeo = 86400
 cache_ttl_geocode = 86400
 log_retain_days = 30
+
+# ===== 更新与维护 =====
+# 在线更新清单 HTTPS JSON 地址；留空则后台“检查更新”不可用
+update_manifest_url = ""

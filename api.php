@@ -96,7 +96,8 @@ $routes = array_merge(
     require API_DIR . '/api_auth.php',
     require API_DIR . '/api_weather.php',
     require API_DIR . '/api_cities.php',
-    require API_DIR . '/api_admin.php'
+    require API_DIR . '/api_admin.php',
+    require API_DIR . '/api_update.php'
 );
 
 $action = (string) param('action', '');

@@ -1,4 +1,4 @@
-# 配置：排除线上隐私配置内容
+# 配置：仅模板可提交，config.toml 直接排除
 config.toml
 !example_config.toml
 
@@ -7,6 +7,10 @@ config.toml
 /config_backups/*
 !/config_backups/.htaccess
 config.toml.lock
+
+# 更新备份与临时文件
+/update_backups/*
+!/update_backups/.htaccess
 
 # 工具与日志
 /.codeartsdoer/

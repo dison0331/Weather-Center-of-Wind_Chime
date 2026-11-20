@@ -122,7 +122,8 @@ schema.sql  config.toml
 api/
 ├─ config.php  toml.php
 ├─ helpers.php  db.php  auth.php  rate_limit.php  amap.php
-└─ api_auth.php  api_weather.php  api_cities.php  api_admin.php
+├─ api_auth.php  api_weather.php  api_cities.php
+└─ api_admin.php  api_update.php
 ```
 
 **按环境需要：**
@@ -141,16 +142,13 @@ VERSION          版本定义文件（1.1.0.1021）
 doc/             交接文档
 mulu.md          目录速查
 ```
-example_config.toml  配置模板（首次部署复制为 config.toml）
-doc/             交接文档
-mulu.md          目录速查
-```
 
 **不要上传：**
 
 ```
 .codeartsdoer/   IDE 缓存与索引，不参与运行
 weather.db*      本地运行时数据库；首次部署由服务器自动创建（迁移场景除外，见第 7 节）
+update_backups/  在线更新备份（运行时生成，含配置与数据库副本）
 ```
 
 注意：
@@ -169,7 +167,8 @@ weather.db*      本地运行时数据库；首次部署由服务器自动创建
 宝塔「软件商店 → PHP-8.x → 设置 → 安装扩展」：
 
 - 必需：`pdo_sqlite`
-- 推荐：`sqlite3`、`curl`
+- 在线更新必需：`zip`（ZipArchive）
+- 推荐：`sqlite3`、`curl`（在线更新下载优先使用 cURL）
 - 可选：`mbstring`、`openssl`
 
 安装后无需修改代码，刷新页面即可。
@@ -239,6 +238,10 @@ location ^~ /api/ { return 404; }
 # 配置自动备份目录禁止直接访问（含高德 Key）
 location = /config_backups { return 404; }
 location ^~ /config_backups/ { return 404; }
+
+# 在线更新备份目录禁止直接访问（含代码、配置与数据库副本）
+location = /update_backups { return 404; }
+location ^~ /update_backups/ { return 404; }
 ```
 
 > 如需展示项目自带的 `404.html`，在站点配置的 `server` 级别加入 `error_page 404 /404.html;`（不要放进 `location` 内）。
@@ -526,6 +529,8 @@ https://weather.example.com,https://www.example.com
 4. 访问 `api.php?action=ping` 确认 `version` 与预期一致；
 5. 打开后台核对配置（配置保存在 `config.toml`，不会因覆盖代码丢失）；
 6. 测试天气、地图、登录。
+
+**在线更新（可选）：** 后台页头版本号旁「详情」→「检查更新」→「立即更新」。系统会先备份代码、`config.toml` 与数据库到 `update_backups/`，下载并校验 HTTPS 更新包，替换代码后请求 `api.php?action=ping`；失败自动回退，成功后可用「回退到上一版本」恢复。要求 PHP `zip` 扩展，`update_backups/` 对 `www` 可写；更新源在「系统配置 → 更新与维护」填写 `update_manifest_url`。
 
 当前数据库版本为 `PRAGMA user_version = 3`。旧版本（1/2）会在首次请求时迁移配置与用户表字段（`email` / `account_state` / `warning` / `warned_at`）；旧 `system_config` 迁移完成后可手动执行 `DROP TABLE IF EXISTS system_config;`。升级前务必备份数据库与配置文件。
 

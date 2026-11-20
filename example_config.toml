@@ -56,3 +56,7 @@ cache_ttl_tips = 300                # 联想缓存（秒）
 cache_ttl_regeo = 86400             # 逆地理缓存（秒）
 cache_ttl_geocode = 86400           # 地理编码缓存（秒）
 log_retain_days = 30                # 日志 / 调用记录保留天数
+
+# ===== 更新与维护 =====
+# 在线更新清单 HTTPS JSON 地址；留空则后台“检查更新”不可用
+update_manifest_url = ""

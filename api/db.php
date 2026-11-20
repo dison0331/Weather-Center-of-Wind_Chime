@@ -10,9 +10,13 @@ if (!defined('IN_PROJECT')) {
 }
 
 /** 获取 PDO 单例 */
-function db()
+function db($reset = false)
 {
     static $pdo = null;
+    if ($reset) {
+        $pdo = null;
+        return null;
+    }
     if ($pdo instanceof PDO) {
         return $pdo;
     }

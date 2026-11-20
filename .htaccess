@@ -1,6 +1,9 @@
 Options -Indexes
 ErrorDocument 404 /404.html
 
+# 配置与更新备份目录禁止直接访问（含密钥、代码与数据库副本）
+RedirectMatch 404 ^/(config_backups|update_backups)/
+
 <IfModule mod_authz_core.c>
     <FilesMatch "\.(db|db-wal|db-shm|sql|md|ini|toml|bak|tmp|lock)$">
         Require all denied

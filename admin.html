@@ -120,6 +120,19 @@ tbody tr:hover{background:var(--soft)}
 .actions-row{display:flex;gap:10px;margin-top:18px;align-items:center}
 .actions-row .hint{font-size:11.5px;color:var(--muted)}
 
+.modal-mask{position:fixed;inset:0;z-index:80;display:flex;align-items:center;justify-content:center;padding:20px;background:rgba(10,22,45,.48)}
+.modal-card{width:min(540px,100%);max-height:86vh;overflow:auto;background:var(--panel);border:1px solid var(--line);border-radius:16px;box-shadow:0 30px 80px rgba(10,25,55,.32);padding:18px 20px 20px}
+.modal-head{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.modal-head h3{margin:0;font-size:17px}
+.modal-close{margin-left:auto;width:30px;height:30px;border:none;border-radius:8px;background:transparent;color:var(--muted);font-size:20px;line-height:1}
+.modal-close:hover{background:var(--soft);color:var(--text)}
+.upd-row{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px dashed var(--line);font-size:13px}
+.upd-row>span:first-child{flex:0 0 88px;color:var(--muted);font-size:12px}
+.upd-row strong{font-size:14px}
+.upd-notes{margin:10px 0 0;padding:10px 12px;border-radius:10px;background:var(--bg);border:1px solid var(--line);font-size:12.5px;color:var(--muted);white-space:pre-wrap;max-height:160px;overflow:auto}
+.upd-status{margin-top:10px;font-size:12px;color:var(--muted);min-height:18px;line-height:1.5}
+.upd-actions{display:flex;flex-wrap:wrap;gap:9px;margin-top:14px}
+.upd-actions a.btn-s{display:inline-flex;align-items:center}
 .toast{position:fixed;left:50%;bottom:32px;transform:translate(-50%,20px);background:#1b2735;color:#fff;padding:10px 18px;border-radius:999px;font-size:13px;opacity:0;pointer-events:none;transition:.22s;z-index:90;max-width:80vw;text-align:center}
 .toast.show{opacity:1;transform:translate(-50%,0)}
 html[data-theme="dark"] .toast{background:#2a3a56}
@@ -162,6 +175,7 @@ html[data-theme="dark"] .toast{background:#2a3a56}
     <div class="brand"><span id="brandName">天气中心</span><small>管理后台</small></div>
     <div class="spacer"></div>
     <span id="appVersion" class="app-version">V1.1.0.1021</span>
+    <button id="updateDetailBtn" class="hbtn plain" type="button" title="查看版本详情与在线更新">详情</button>
     <span id="adminWho" class="who"></span>
     <a class="hbtn plain" href="user.html" target="_blank" rel="noopener">用户端</a>
     <button id="themeBtn" class="hbtn plain" title="切换主题">🌙</button>
@@ -332,6 +346,12 @@ html[data-theme="dark"] .toast{background:#2a3a56}
             <div class="switch"><input data-cfg="trust_proxy" id="cfgProxy" type="checkbox"><span>信任反向代理 X-Forwarded-For</span></div>
           </div>
 
+          <div class="cfg-section">更新与维护</div>
+          <div class="cfg-grid">
+            <label class="field full"><span>更新清单 URL（HTTPS JSON，留空则关闭在线更新）</span><input data-cfg="update_manifest_url" type="url" maxlength="300" placeholder="https://example.com/weather-manifest.json"></label>
+          </div>
+          <div class="cfg-note">清单需包含 version、download_url（HTTPS），可选 sha256、release_url、notes；更新前自动全量备份，失败自动回退。</div>
+
           <div class="actions-row">
             <button class="btn-s primary-s" type="submit" id="configSave" style="height:38px;padding:0 20px">保存配置</button>
             <span class="hint" id="configUpdated">最后更新：--</span>
@@ -372,6 +392,27 @@ html[data-theme="dark"] .toast{background:#2a3a56}
   </div>
 </div>
 
+<div id="updateModal" class="modal-mask" hidden>
+  <div class="modal-card">
+    <div class="modal-head">
+      <h3>版本与更新</h3>
+      <button id="updateClose" class="modal-close" type="button" title="关闭">×</button>
+    </div>
+    <div class="upd-row"><span>当前版本</span><strong id="updCurrent" class="mono">--</strong></div>
+    <div class="upd-row"><span>更新源</span><span id="updSource" class="mono">未配置</span></div>
+    <div class="upd-row"><span>最新版本</span><strong id="updLatest" class="mono">--</strong><span id="updBadge" class="badge"></span></div>
+    <div id="updNotes" class="upd-notes" hidden></div>
+    <div class="upd-row"><span>可回退节点</span><span id="updBackup" class="mono">--</span></div>
+    <div id="updStatus" class="upd-status">更新前会自动全量备份，更新失败将自动回退。</div>
+    <div class="upd-actions">
+      <button id="updCheckBtn" class="btn-s" type="button">检查更新</button>
+      <button id="updApplyBtn" class="btn-s primary-s" type="button" disabled>立即更新</button>
+      <button id="updRollbackBtn" class="btn-s danger-s" type="button" disabled>回退到上一版本</button>
+      <a id="updReleaseLink" class="btn-s" target="_blank" rel="noopener" hidden>查看发布说明</a>
+    </div>
+  </div>
+</div>
+
 <div id="toast" class="toast" role="status"></div>
 
 <script>
@@ -385,6 +426,7 @@ html[data-theme="dark"] .toast{background:#2a3a56}
     trend: [],
     logs: { page: 1, size: 20, total: 0, pages: 1, filter: {} },
     users: { page: 1, size: 20, total: 0, pages: 1, keyword: '' },
+    update: { current: '', latest: '', available: false, manifestConfigured: false, hasBackup: false },
     overviewTimer: null
   };
 
@@ -1020,6 +1062,167 @@ html[data-theme="dark"] .toast{background:#2a3a56}
       toast(e.message || '操作失败');
     }
   });
+
+  // ---------- 版本与在线更新 ----------
+  var updateBusy = false;
+
+  function displayVersion(value) {
+    var v = String(value || '').replace(/^[Vv]/, '');
+    return v ? 'V' + v : '--';
+  }
+
+  function setUpdateStatus(message, isError) {
+    var el = $('updStatus');
+    el.textContent = message || '';
+    el.style.color = isError ? 'var(--danger)' : '';
+  }
+
+  function setUpdateBusy(busy) {
+    updateBusy = busy;
+    ['updCheckBtn', 'updApplyBtn', 'updRollbackBtn', 'updateClose'].forEach(function (id) {
+      var el = $(id);
+      if (el) el.disabled = busy;
+    });
+    if (!busy) {
+      $('updCheckBtn').disabled = !state.update.manifestConfigured;
+      $('updApplyBtn').disabled = !state.update.available || !state.update.manifestConfigured;
+      $('updRollbackBtn').disabled = !state.update.hasBackup;
+      $('updApplyBtn').textContent = '立即更新';
+      $('updRollbackBtn').textContent = '回退到上一版本';
+    }
+  }
+
+  function fillUpdateStatus(data) {
+    state.update.current = String(data.current || '');
+    state.update.manifestConfigured = !!data.manifest_configured;
+    state.update.hasBackup = !!(data.last_backup && data.last_backup.dir);
+    $('updCurrent').textContent = displayVersion(data.current);
+    if (data.current) {
+      var versionEl = $('appVersion');
+      if (versionEl) versionEl.textContent = displayVersion(data.current);
+    }
+    var sourceEl = $('updSource');
+    sourceEl.textContent = data.manifest_configured ? '已配置（HTTPS）' : '未配置，请到系统配置 → 更新与维护填写';
+    sourceEl.style.color = data.manifest_configured ? '' : 'var(--danger)';
+    var backup = data.last_backup;
+    $('updBackup').textContent = backup
+      ? displayVersion(backup.from_version) + ' → ' + displayVersion(backup.to_version) + '（' + (backup.created_at || '') + '）'
+      : '暂无可回退节点';
+    if (!updateBusy) {
+      $('updCheckBtn').disabled = !state.update.manifestConfigured;
+      $('updRollbackBtn').disabled = !state.update.hasBackup;
+    }
+  }
+
+  async function loadUpdateStatus() {
+    try {
+      fillUpdateStatus(await api('admin_update_status', {}, 'POST'));
+    } catch (e) {
+      setUpdateStatus(e.message || '读取更新状态失败', true);
+    }
+  }
+
+  async function checkUpdate() {
+    setUpdateStatus('正在检查更新…');
+    setUpdateBusy(true);
+    try {
+      var data = await api('admin_update_check', {}, 'POST');
+      state.update.latest = String(data.latest || '');
+      state.update.available = !!data.update_available;
+      $('updLatest').textContent = displayVersion(data.latest);
+      var badge = $('updBadge');
+      badge.textContent = data.update_available ? '发现新版本' : '已是最新';
+      badge.className = 'badge ' + (data.update_available ? 'ok' : '');
+      var notes = $('updNotes');
+      if (data.notes) {
+        notes.hidden = false;
+        notes.textContent = String(data.notes);
+      } else {
+        notes.hidden = true;
+        notes.textContent = '';
+      }
+      var link = $('updReleaseLink');
+      if (data.release_url) {
+        link.href = data.release_url;
+        link.hidden = false;
+      } else {
+        link.hidden = true;
+        link.removeAttribute('href');
+      }
+      setUpdateStatus('检查完成（' + (data.checked_at || '') + '）');
+    } catch (e) {
+      state.update.available = false;
+      setUpdateStatus(e.message || '检查更新失败', true);
+    } finally {
+      setUpdateBusy(false);
+    }
+  }
+
+  async function applyUpdate() {
+    if (!state.update.available) { setUpdateStatus('请先检查更新', true); return; }
+    var message = '确认更新到 ' + displayVersion(state.update.latest) + '？\n\n更新前会自动全量备份代码、配置与数据库；更新失败将自动回退。';
+    if (!window.confirm(message)) return;
+    setUpdateStatus('正在更新，请勿关闭页面…');
+    setUpdateBusy(true);
+    $('updApplyBtn').textContent = '更新中…';
+    try {
+      var data = await api('admin_update_apply', {}, 'POST');
+      setUpdateStatus('更新完成：' + displayVersion(data.from_version) + ' → ' + displayVersion(data.current) + '，页面即将重新加载');
+      window.setTimeout(function () { window.location.reload(); }, 1500);
+    } catch (e) {
+      setUpdateStatus(e.message || '更新失败，已尝试自动回退', true);
+      setUpdateBusy(false);
+      loadUpdateStatus();
+    }
+  }
+
+  async function rollbackUpdate() {
+    if (!state.update.hasBackup) { setUpdateStatus('暂无可回退节点', true); return; }
+    if (!window.confirm('确认回退到上一版本？\n\n代码、配置与数据库将恢复到最近一次成功更新前的状态。')) return;
+    setUpdateStatus('正在回退，请勿关闭页面…');
+    setUpdateBusy(true);
+    $('updRollbackBtn').textContent = '回退中…';
+    try {
+      var data = await api('admin_update_rollback', {}, 'POST');
+      setUpdateStatus('已回退：' + displayVersion(data.from_version) + ' → ' + displayVersion(data.current) + '，页面即将重新加载');
+      window.setTimeout(function () { window.location.reload(); }, 1500);
+    } catch (e) {
+      setUpdateStatus(e.message || '回退失败', true);
+      setUpdateBusy(false);
+    }
+  }
+
+  function openUpdateModal() {
+    $('updateModal').hidden = false;
+    $('updLatest').textContent = '--';
+    $('updBadge').textContent = '';
+    $('updBadge').className = 'badge';
+    $('updNotes').hidden = true;
+    $('updNotes').textContent = '';
+    $('updReleaseLink').hidden = true;
+    $('updReleaseLink').removeAttribute('href');
+    state.update.available = false;
+    $('updApplyBtn').disabled = true;
+    setUpdateStatus('更新前会自动全量备份，更新失败将自动回退。');
+    loadUpdateStatus();
+  }
+
+  function closeUpdateModal() {
+    if (updateBusy) return;
+    $('updateModal').hidden = true;
+  }
+
+  $('updateDetailBtn').addEventListener('click', openUpdateModal);
+  $('updateClose').addEventListener('click', closeUpdateModal);
+  $('updateModal').addEventListener('click', function (event) {
+    if (event.target === $('updateModal')) closeUpdateModal();
+  });
+  document.addEventListener('keydown', function (event) {
+    if (event.key === 'Escape' && !$('updateModal').hidden) closeUpdateModal();
+  });
+  $('updCheckBtn').addEventListener('click', checkUpdate);
+  $('updApplyBtn').addEventListener('click', applyUpdate);
+  $('updRollbackBtn').addEventListener('click', rollbackUpdate);
 
   // ---------- 启动 ----------
   async function boot() {

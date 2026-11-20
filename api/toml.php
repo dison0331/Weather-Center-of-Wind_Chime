@@ -22,6 +22,7 @@ function toml_default_config()
         'site_icon'             => 'favicon.svg',
         'app_version'           => '1.1.0.1021',
         'admin_email'           => '',
+        'update_manifest_url'   => '',
         'timezone'              => 'Asia/Shanghai',
         'language'              => 'zh-CN',
         'default_city'          => '深圳',
@@ -77,6 +78,7 @@ function toml_config_groups()
             'cache_ttl_weather', 'cache_ttl_tips', 'cache_ttl_regeo',
             'cache_ttl_geocode', 'log_retain_days',
         ],
+        '更新与维护' => ['update_manifest_url'],
     ];
 }
 
